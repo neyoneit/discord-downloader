@@ -1,0 +1,12 @@
+import os
+from os.path import dirname
+
+DISCORD_TOKEN='<token>'
+
+CHANNELS={
+    "jeden kanál",
+    "druhej kanál",
+    "třetí kanál",
+}
+
+STATE_DIRECTORY = os.path.join(dirname(__file__), "state")
