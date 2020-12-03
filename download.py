@@ -53,8 +53,7 @@ class DownloaderClient(discord.Client):
                 print(f"## {name}")
                 await self.download_channel(name, channel)
 
-    async def on_message(self, message):
-        print("message")
+        print("Everything done")
 
     async def download_channel(self, name: str, channel: Messageable):
         savepoint = Savepoint(os.path.join(STATE_DIRECTORY, urllib.parse.quote(name)+".txt"))
