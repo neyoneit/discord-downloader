@@ -58,14 +58,24 @@ class DownloaderClient(discord.Client):
             oldest_first=True,
             after=None if last_processed_message_id is None else discord.Object(last_processed_message_id)
         )
+
+        def before_sync():
+            print("Syncing… ", end="")
+
+        def after_sync():
+            print("Done")
         message: Message
         async for message in history:
             print(f"{message} #{message.id} {message.created_at}: {message.content}")
             attachment: Attachment
             for attachment in message.attachments:
                 print(f"* {attachment}")
-            savepoint.set(message.id)  # mark as done
+            savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()
+
+
+def noop():
+    pass
 
 
 class Savepoint:
@@ -83,12 +93,14 @@ class Savepoint:
     def get(self):
         return self.value
 
-    def set(self, new_value: int):
+    def set(self, new_value: int, before_sync=noop, after_sync=noop):
         self.value = new_value
         now = datetime.datetime.now()
         if (now-self.last_synced) > datetime.timedelta(seconds=1):
+            before_sync()
             self.flush()
             self.last_synced = now
+            after_sync()
 
     def flush(self):
         tmp_filename = f"{self.filename}.tmp"
