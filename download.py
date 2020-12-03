@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import time
+import sys
 import urllib
 import urllib.parse
 import datetime
@@ -16,10 +17,15 @@ from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY
 class DownloaderClient(discord.Client):
 
     async def on_ready(self):
+        self.ret = 0
         try:
-            await self.download_news()
-        finally:
-            await self.logout()
+            try:
+                await self.download_news()
+            finally:
+                await self.logout()
+        except Exception as e:
+            ret = 1
+            print(e)
 
     async def download_news(self):
         print("Connected")
@@ -100,6 +106,7 @@ def main():
     print("Connecting…")
     client = DownloaderClient()
     client.run(DISCORD_TOKEN)
+    sys.exit(client.ret)
 
 if __name__ == "__main__":
     main()
