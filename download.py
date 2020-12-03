@@ -39,10 +39,11 @@ class DownloaderClient(discord.Client):
         channels = {}
 
         for channel in self.get_all_channels():
-            if hasattr(channel, "history") and hasattr(channel, "name"):
-                if channels.get(channel.name) is not None:
-                    raise Exception(f"Multiple channels for name {channel.name}")
-                channels[channel.name] = channel
+            if hasattr(channel, "history") and hasattr(channel, "name") and hasattr(channel, "guild"):
+                name = f"{channel.guild}--{channel.name}"
+                if channels.get(name) is not None:
+                    raise Exception(f"Multiple channels for name {name}")
+                channels[name] = channel
         missing = CHANNELS - channels.keys()
         if len(missing) > 0:
             raise Exception(f"Some channels were not found: {missing}")
