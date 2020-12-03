@@ -13,5 +13,8 @@ STATE_DIRECTORY = os.path.join(dirname(__file__), "state")
 
 ATTACHMENTS_DIRECTORY = os.path.join(dirname(__file__), "out", "attachments")
 
+# Temp directory needs to be on the same drive as ATTACHMENTS_DIRECTORY.
+TEMP_DIRECTORY = os.path.join(dirname(__file__), "out", "tmp")
+
 URLS_FILE = os.path.join(dirname(__file__), "out", "urls.txt")
 

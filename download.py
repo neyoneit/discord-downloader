@@ -13,7 +13,8 @@ from discord.abc import Messageable
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
-from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY, URLS_FILE
+from movers import RenamingMover
+from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY, URLS_FILE, TEMP_DIRECTORY
 
 
 def extract_urls(msg):
@@ -57,6 +58,7 @@ class DownloaderClient(discord.Client):
 
     async def download_channel(self, name: str, channel: Messageable):
         savepoint = Savepoint(os.path.join(STATE_DIRECTORY, urllib.parse.quote(name)+".txt"))
+        mover = RenamingMover()
         last_processed_message_id = savepoint.get()  # messages have increasing ids; we can use it to mark what messages we have seen
         history: HistoryIterator = channel.history(
             limit=None,
@@ -82,9 +84,17 @@ class DownloaderClient(discord.Client):
                         urls_file.write("\n")
 
                 attachment: Attachment
-                for attachment in message.attachments:
-                    with open(os.path.join(ATTACHMENTS_DIRECTORY, sanitize_filename(attachment.filename, replacement_text='-')), mode="wb") as f:
+                for i, attachment in enumerate(message.attachments):
+                    tmp_file = os.path.join(TEMP_DIRECTORY, f"{message.id}-{attachment.id}-{i}-{os.getpid()}")
+                    out_file = os.path.join(
+                        ATTACHMENTS_DIRECTORY,
+                        sanitize_filename(attachment.filename, replacement_text='-')
+                    )
+                    with open(tmp_file, mode="wb") as f:
                         await attachment.save(f)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    mover.move(tmp_file, out_file)
                     print(f"* {attachment}")
                 savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()
