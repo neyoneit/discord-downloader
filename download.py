@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
+import datetime
 import os
-import time
+import re
 import sys
 import urllib
 import urllib.parse
-import datetime
 
 import discord
 from discord import Message, Attachment
@@ -67,6 +67,10 @@ class DownloaderClient(discord.Client):
         message: Message
         async for message in history:
             print(f"{message} #{message.id} {message.created_at}: {message.content}")
+            urls = re.findall('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', message.content)
+            if len(urls) > 0:
+                print("urls:\n"+"\n".join(urls))
+
             attachment: Attachment
             for attachment in message.attachments:
                 print(f"* {attachment}")
