@@ -88,6 +88,8 @@ class Savepoint:
         tmp_filename = f"{self.filename}.tmp"
         with open(tmp_filename, "w") as f:
             f.write(str(self.value))
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp_filename, self.filename)
 
     def close(self):
