@@ -10,8 +10,9 @@ import discord
 from discord import Message, Attachment
 from discord.abc import Messageable
 from discord.iterators import HistoryIterator
+from pathvalidate import sanitize_filename
 
-from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY
+from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY
 
 
 class DownloaderClient(discord.Client):
@@ -73,6 +74,8 @@ class DownloaderClient(discord.Client):
 
             attachment: Attachment
             for attachment in message.attachments:
+                with open(os.path.join(ATTACHMENTS_DIRECTORY, sanitize_filename(attachment.filename, replacement_text='-')), mode="wb") as f:
+                    await attachment.save(f)
                 print(f"* {attachment}")
             savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()

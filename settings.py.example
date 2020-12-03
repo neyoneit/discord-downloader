@@ -10,3 +10,6 @@ CHANNELS={
 }
 
 STATE_DIRECTORY = os.path.join(dirname(__file__), "state")
+
+ATTACHMENTS_DIRECTORY = os.path.join(dirname(__file__), "attachments")
+
