@@ -81,8 +81,7 @@ class DownloaderClient(discord.Client):
                 urls = extract_urls(message.content)
                 if len(urls) > 0:
                     for url in urls:
-                        urls_file.write(url)
-                        urls_file.write("\n")
+                        urls_file.write(f"{url} ({message.jump_url})\n")
 
                 attachment: Attachment
                 for i, attachment in enumerate(message.attachments):
