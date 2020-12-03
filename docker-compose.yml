@@ -5,3 +5,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: discord-downloader
+    environment:
+      PYTHONUNBUFFERED: 1
+    volumes:
+    - ./state:/opt/dldr/state
+    - ./attachments:/opt/dldr/attachments
