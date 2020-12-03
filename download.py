@@ -3,6 +3,7 @@ import datetime
 import os
 import re
 import sys
+import traceback
 import urllib
 import urllib.parse
 
@@ -12,7 +13,11 @@ from discord.abc import Messageable
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
-from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY
+from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY, URLS_FILE
+
+
+def extract_urls(msg):
+    return re.findall(r'(https?://[^\s]+)', msg)
 
 
 class DownloaderClient(discord.Client):
@@ -25,8 +30,8 @@ class DownloaderClient(discord.Client):
             finally:
                 await self.logout()
         except Exception as e:
-            ret = 1
-            print(e)
+            self.ret = 1
+            traceback.print_exc(file=sys.stderr)
 
     async def download_news(self):
         print("Connected")
@@ -59,25 +64,30 @@ class DownloaderClient(discord.Client):
             oldest_first=True,
             after=None if last_processed_message_id is None else discord.Object(last_processed_message_id)
         )
-
-        def before_sync():
-            print("Syncing… ", end="")
-
-        def after_sync():
-            print("Done")
         message: Message
-        async for message in history:
-            print(f"{message} #{message.id} {message.created_at}: {message.content}")
-            urls = re.findall('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', message.content)
-            if len(urls) > 0:
-                print("urls:\n"+"\n".join(urls))
+        with open(URLS_FILE, "a") as urls_file:
+            def before_sync():
+                print("Syncing… ", end="")
+                urls_file.flush()
+                os.fsync(urls_file.fileno())
 
-            attachment: Attachment
-            for attachment in message.attachments:
-                with open(os.path.join(ATTACHMENTS_DIRECTORY, sanitize_filename(attachment.filename, replacement_text='-')), mode="wb") as f:
-                    await attachment.save(f)
-                print(f"* {attachment}")
-            savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
+            def after_sync():
+                print("Done")
+
+            async for message in history:
+                print(f"#{message.id} {message.created_at}: {message.content}")
+                urls = extract_urls(message.content)
+                if len(urls) > 0:
+                    for url in urls:
+                        urls_file.write(url)
+                        urls_file.write("\n")
+
+                attachment: Attachment
+                for attachment in message.attachments:
+                    with open(os.path.join(ATTACHMENTS_DIRECTORY, sanitize_filename(attachment.filename, replacement_text='-')), mode="wb") as f:
+                        await attachment.save(f)
+                    print(f"* {attachment}")
+                savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()
 
 
@@ -126,6 +136,7 @@ def main():
     client = DownloaderClient()
     client.run(DISCORD_TOKEN)
     sys.exit(client.ret)
+
 
 if __name__ == "__main__":
     main()

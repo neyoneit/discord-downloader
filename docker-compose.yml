@@ -9,4 +9,5 @@ services:
       PYTHONUNBUFFERED: 1
     volumes:
     - ./state:/opt/dldr/state
-    - ./attachments:/opt/dldr/attachments
+    - ./out:/opt/dldr/out
+    - ./out/attachments:/opt/dldr/out/attachments

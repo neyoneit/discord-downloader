@@ -1,4 +1,5 @@
 .idea
 state
-attachments
+out
 settings.py
+__pycache__
