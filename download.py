@@ -65,7 +65,6 @@ class DownloaderClient(discord.Client):
             oldest_first=True,
             after=None if last_processed_message_id is None else discord.Object(last_processed_message_id)
         )
-        message: Message
         with open(URLS_FILE, "a") as urls_file:
             def before_sync():
                 print("Syncing… ", end="")
@@ -75,6 +74,7 @@ class DownloaderClient(discord.Client):
             def after_sync():
                 print("Done")
 
+            message: Message
             async for message in history:
                 print(f"#{message.id} {message.created_at}: {message.content}")
                 urls = extract_urls(message.content)
