@@ -6,7 +6,7 @@ from download import extract_urls
 class UrlsTest(TestCase):
 
     def test_urls(self):
-        self.assertEquals(extract_urls("""
+        self.assertEqual(extract_urls("""
             https://giphy.com/gifs/beamiller-miller-bea-jDONZD3qrOlyBFTkXU
                 https://discord.com/channels/783750597902860349/783750597902860352
                 https://discordpy.readthedocs.io/en/latest/discord.html
