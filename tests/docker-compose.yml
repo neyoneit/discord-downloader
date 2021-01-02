@@ -2,13 +2,13 @@ version: '3'
 services:
   downloader:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
       args:
-        IMAGE: run
-    container_name: discord_downloader
+        IMAGE: test
+    container_name: discord_downloader_test
     environment:
       PYTHONUNBUFFERED: 1
+    command: echo hello
     volumes:
-    - ./state:/opt/dldr/state
-    - ./out:/opt/dldr/out
+    - ..:/opt/dldr/:ro
