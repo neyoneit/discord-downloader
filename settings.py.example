@@ -20,6 +20,8 @@ URLS_FILE = os.path.join(dirname(__file__), "out", "urls.txt")
 
 IGMDB_TOKEN = '…'  # obtain token from https://www.igmdb.org/?page=usercp
 
+IGMDB_POLLING_INTERVAL = 5*60  # seconds
+
 RENDERING_OUTPUT_CHANNEL = 'server name--výstupní kanál'
 
 RENDERING_DONE_MESSAGE_PREFIX = "New render:\n"

@@ -21,7 +21,8 @@ from discord_downloader.local_queue import LocallyQueuedUploader
 from discord_downloader.movers import RenamingMover
 from discord_downloader.persistent_state import StoredState, Savepoint
 from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY, URLS_FILE, TEMP_DIRECTORY, \
-    RENDERING_OUTPUT_CHANNEL, IGMDB_TOKEN, RENDERING_DONE_MESSAGE_PREFIX, RENDERING_DONE_MESSAGE_SUFFIX
+    RENDERING_OUTPUT_CHANNEL, IGMDB_TOKEN, RENDERING_DONE_MESSAGE_PREFIX, RENDERING_DONE_MESSAGE_SUFFIX, \
+    IGMDB_POLLING_INTERVAL
 
 
 def extract_urls(msg):
@@ -33,6 +34,7 @@ class DownloaderClient(discord.Client):
     _expected_thread = None
     _lock = asyncio.Lock()
     _output_channel: Optional[Messageable]
+    _dirty=False
 
     def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, error_log: TextIO):
         super(DownloaderClient, self).__init__()
@@ -40,6 +42,7 @@ class DownloaderClient(discord.Client):
         self.ret = 0
         self._check_thread()
         self._error_log = error_log
+        self._prepared = False
 
     async def on_ready(self):
         try:
@@ -47,28 +50,62 @@ class DownloaderClient(discord.Client):
                 self._check_thread()
                 await self._init_channels()
                 self._check_thread()
-                if self._uploader is not None:
-                    async with self._lock:
-                        self._check_thread()
-                        try:
-                            await self._uploader.check_for_done(
-                                done_callback=self._after_upload,
-                                failed_callback=self._after_error,
-                            )
-                            self._check_thread()
-                            await self._uploader.retry_uploads()
-                            self._check_thread()
-                        except Exception as e:
-                            await self._after_error(None, e)
-                            self._check_thread()
+                await self._check_uploads()
+                self._check_thread()
                 await self._download_news()
                 self._check_thread()
+                print("Initial check done")
+                self._prepared = True
+                if self._dirty:
+                    print("I am dirty!")
+                    await self._download_news()
+                    self._check_thread()
+                    self._dirty = False
+                while True:
+                    self._check_thread()
+                    await asyncio.sleep(IGMDB_POLLING_INTERVAL)
+                    self._check_thread()
+                    await self._check_uploads()
+                    self._check_thread()
+
             finally:
                 await self.logout()
                 self._check_thread()
         except Exception as e:
             self.ret = 1
             traceback.print_exc(file=sys.stderr)
+
+    async def on_error(self, event_method, *args, **kwargs):
+        print("Unhandled error:")
+        traceback.print_exc()
+        self._error_log.write("Unhandled error:")
+        traceback.print_exc(file=self._error_log)
+        sys.exit(2)
+
+    async def on_message(self, message: Message):
+        print("new message")
+        self._check_thread()
+        if not self._prepared:
+            self._dirty = True
+        else:
+            await self._download_news()
+            self._check_thread()
+
+    async def _check_uploads(self):
+        if self._uploader is not None:
+            async with self._lock:
+                self._check_thread()
+                try:
+                    await self._uploader.check_for_done(
+                        done_callback=self._after_upload,
+                        failed_callback=self._after_error,
+                    )
+                    self._check_thread()
+                    await self._uploader.retry_uploads()
+                    self._check_thread()
+                except Exception as e:
+                    await self._after_error(None, e)
+                    self._check_thread()
 
     async def _after_upload(self, url: str):
         self._check_thread()
@@ -98,15 +135,15 @@ class DownloaderClient(discord.Client):
             raise Exception(f"Output channel in RENDERING_OUTPUT_CHANNEL not found: {RENDERING_OUTPUT_CHANNEL}")
 
     async def _download_news(self):
-        print("Checking individual channels")
-        channel: Messageable
-        for name, channel in self._channels.items():
-            if name in CHANNELS:
-                print(f"## {name}")
-                await self._download_channel(name, channel)
-                self._check_thread()
-
-        print("Everything done")
+        async with self._lock:
+            print("Checking individual channels")
+            channel: Messageable
+            for name, channel in self._channels.items():
+                if name in CHANNELS:
+                    print(f"## {name}")
+                    await self._download_channel(name, channel)
+                    self._check_thread()
+            print("Everything done")
 
     async def _get_channels(self):
         channels = {}
