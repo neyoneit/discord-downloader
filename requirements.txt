@@ -1,2 +1,3 @@
 discord.py==1.5.1
 pathvalidate==2.3.0
+filelock==3.0.12
