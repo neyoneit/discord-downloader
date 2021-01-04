@@ -83,13 +83,19 @@ class DownloaderClient(discord.Client):
         sys.exit(2)
 
     async def on_message(self, message: Message):
-        print("new message")
         self._check_thread()
-        if not self._prepared:
-            self._dirty = True
+        channel_name = self._reverse_channels.get(message.channel)
+        print(f"new message in channel: {channel_name} ({message.channel})")
+        if channel_name in CHANNELS:
+            if not self._prepared:
+                self._dirty = True
+            else:
+                print("Checking single channel…")
+                await self._download_channel(channel_name, message.channel)
+                self._check_thread()
+                print("done")
         else:
-            await self._download_news()
-            self._check_thread()
+            print("I am not interested in this channel!")
 
     async def _check_uploads(self):
         if self._uploader is not None:
@@ -124,6 +130,7 @@ class DownloaderClient(discord.Client):
 
         self._check_thread()
         self._channels = await self._get_channels()
+        self._reverse_channels = {v: k for k, v in self._channels.items()}
         self._check_thread()
         missing = CHANNELS - self._channels.keys()
         if len(missing) > 0:
