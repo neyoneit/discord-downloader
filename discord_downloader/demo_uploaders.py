@@ -76,7 +76,9 @@ class IgmdbUploader(DemoUploader):
                     if error == "Can't submit; you are banned or have reached the maximum number of demos in queue":
                         raise QueueFullException()
                     else:
-                        raise UploadException(error)
+                        data_safe = data.copy()
+                        del data_safe['api_key']
+                        raise UploadException(f"{error}; data={json.dumps(data_safe)}")
                 return UploadResult(success = success, render_id = render_id)
 
     async def check_status(self, id: int) -> Optional[str]:
