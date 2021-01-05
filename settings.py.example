@@ -22,7 +22,7 @@ IGMDB_TOKEN = '…'  # obtain token from https://www.igmdb.org/?page=usercp
 
 IGMDB_POLLING_INTERVAL = 5*60  # seconds
 
-RENDERING_OUTPUT_CHANNEL = 'server name--výstupní kanál'
+RENDERING_OUTPUT_CHANNEL = 'server name--výstupní kanál'  # or RENDERING_OUTPUT_CHANNEL = ['server name--výstupní kanál1', 'server name--výstupní kanál2']
 
 RENDERING_DONE_MESSAGE_PREFIX = "New render:\n"
 

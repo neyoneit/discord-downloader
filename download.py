@@ -7,7 +7,7 @@ import threading
 import traceback
 import urllib
 import urllib.parse
-from typing import TextIO, Optional
+from typing import TextIO, Optional, List
 
 import discord
 import filelock
@@ -33,7 +33,7 @@ class DownloaderClient(discord.Client):
 
     _expected_thread = None
     _lock = asyncio.Lock()
-    _output_channel: Optional[Messageable]
+    _output_channels: List[Messageable]
     _dirty=False
 
     def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, error_log: TextIO):
@@ -115,7 +115,9 @@ class DownloaderClient(discord.Client):
 
     async def _after_upload(self, url: str):
         self._check_thread()
-        await self._output_channel.send(f"{RENDERING_DONE_MESSAGE_PREFIX}{url}{RENDERING_DONE_MESSAGE_SUFFIX}")
+        for channel in self._output_channels:
+            await channel.send(f"{RENDERING_DONE_MESSAGE_PREFIX}{url}{RENDERING_DONE_MESSAGE_SUFFIX}")
+            self._check_thread()
         print(f"result url: {url}")
 
     async def _after_error(self, identifier: Optional[int], e: Exception):
@@ -136,10 +138,16 @@ class DownloaderClient(discord.Client):
         if len(missing) > 0:
             raise Exception(f"Some channels were not found: {missing}")
 
-        self._output_channel = self._channels.get(RENDERING_OUTPUT_CHANNEL)
+        output_channel_names = [RENDERING_OUTPUT_CHANNEL] if isinstance(RENDERING_OUTPUT_CHANNEL, str) else RENDERING_OUTPUT_CHANNEL
 
-        if self._output_channel is None and RENDERING_OUTPUT_CHANNEL is not None:
-            raise Exception(f"Output channel in RENDERING_OUTPUT_CHANNEL not found: {RENDERING_OUTPUT_CHANNEL}")
+        def get_output_channel(name):
+            channel = self._channels.get(name)
+            if channel is None:
+                raise Exception(f"Output channel in RENDERING_OUTPUT_CHANNEL not found: {name}")
+            else:
+                return channel
+
+        self._output_channels = list(map(get_output_channel, output_channel_names))
 
     async def _download_news(self):
         async with self._lock:
