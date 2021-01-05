@@ -156,7 +156,7 @@ class DownloaderClient(discord.Client):
             for name, channel in self._channels.items():
                 if name in CHANNELS:
                     print(f"## {name}")
-                    await self._download_channel(name, channel)
+                    await self._download_channel_without_lock(name, channel)
                     self._check_thread()
             print("Everything done")
 
@@ -171,6 +171,12 @@ class DownloaderClient(discord.Client):
         return channels
 
     async def _download_channel(self, name: str, channel: Messageable):
+        async with self._lock:
+            self._check_thread()
+            await self._download_channel_without_lock(name, channel)
+            self._check_thread()
+
+    async def _download_channel_without_lock(self, name: str, channel: Messageable):
         self._check_thread()
         savepoint = Savepoint(os.path.join(STATE_DIRECTORY, urllib.parse.quote(name) + ".txt"))
         mover = DeduplicatingRenamingMover()
