@@ -1,5 +1,8 @@
+import filecmp
+import itertools
 import os
 import re
+from typing import Optional
 
 
 class RenamingMover:
@@ -25,6 +28,48 @@ class RenamingMover:
             # This can happen only on Windows.
             # Most likely, such situations are going to be caught by os.path.exists, so this can happen only in case of race conditions.
             return False
+
+    @staticmethod
+    def _adjust_name(dest, i):
+        match = RenamingMover.SPLIT.match(dest)
+        [dest_prefix, dest_suffix] = match.groups() if match else [dest, ""]
+        return f"{dest_prefix}.{i}{dest_suffix}"
+
+
+class DeduplicatingRenamingMover:
+
+    SPLIT = re.compile("""^(.*)(\\.[^/.\\\\]*)$""")
+
+    def move(self, src: str, dest: str) -> Optional[str]:
+        """
+        :param src:
+        :param dest:
+        :return: The adjusted filename. If the file was not actually created due to being a duplicate, it returns None.
+        """
+        for real_dest in self._moving_params(dest):
+            # This is a bit racy, but we don't seem to have a better way for *NIX.
+            # On Windows, this condition is not critical, because we can handle FileExistsError.
+            if os.path.exists(real_dest):
+                if filecmp.cmp(src, real_dest):
+                    os.unlink(src)
+                    return None
+            else:
+                try:
+                    os.rename(src, real_dest)
+                    return real_dest
+                except FileExistsError:
+                    # This can happen only on Windows. Most likely, such situations are going to be caught by
+                    # os.path.exists, so this can happen only in case of race conditions.
+                    if filecmp.cmp(src, real_dest):
+                        os.unlink(src)
+                        return None
+
+        raise AssertionError(
+            "You have successfully iterated over an infinite generator. You can feel like Chuck Norris. Enjoy!")
+
+    @staticmethod
+    def _moving_params(dest):
+        return itertools.chain([dest], map(lambda i: DeduplicatingRenamingMover._adjust_name(dest, i), itertools.count(1)))
 
     @staticmethod
     def _adjust_name(dest, i):

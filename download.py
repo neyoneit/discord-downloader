@@ -18,7 +18,7 @@ from pathvalidate import sanitize_filename
 
 from discord_downloader.demo_uploaders import DemoUploader, FakeUploader, IgmdbUploader
 from discord_downloader.local_queue import LocallyQueuedUploader
-from discord_downloader.movers import RenamingMover
+from discord_downloader.movers import DeduplicatingRenamingMover
 from discord_downloader.persistent_state import StoredState, Savepoint
 from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY, URLS_FILE, TEMP_DIRECTORY, \
     RENDERING_OUTPUT_CHANNEL, IGMDB_TOKEN, RENDERING_DONE_MESSAGE_PREFIX, RENDERING_DONE_MESSAGE_SUFFIX, \
@@ -165,7 +165,7 @@ class DownloaderClient(discord.Client):
     async def _download_channel(self, name: str, channel: Messageable):
         self._check_thread()
         savepoint = Savepoint(os.path.join(STATE_DIRECTORY, urllib.parse.quote(name) + ".txt"))
-        mover = RenamingMover()
+        mover = DeduplicatingRenamingMover()
         last_processed_message_id = savepoint.get()  # messages have increasing ids; we can use it to mark what messages we have seen
         history: HistoryIterator = channel.history(
             limit=None,
@@ -196,16 +196,18 @@ class DownloaderClient(discord.Client):
                         ATTACHMENTS_DIRECTORY,
                         sanitize_filename(attachment.filename, replacement_text='-')
                     )
-                    if re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
-                        await self._post_to_igmdb(attachment)
-                        self._check_thread()
                     with open(tmp_file, mode="wb") as f:
                         await attachment.save(f)
                         self._check_thread()
                         f.flush()
                         os.fsync(f.fileno())
-                    mover.move(tmp_file, out_file)
-                    print(f"* {attachment}")
+                    is_new = mover.move(tmp_file, out_file) is not None
+
+                    if is_new and re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
+                        await self._post_to_igmdb(attachment)
+                        self._check_thread()
+
+                    print(f"* {attachment} (new: {is_new})")
                 savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()
 
