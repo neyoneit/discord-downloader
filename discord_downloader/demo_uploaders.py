@@ -58,7 +58,9 @@ class IgmdbUploader(DemoUploader):
                 'api_key': self._token,
                 'demo_url': url,
                 'resolution': resolution,
-                'output': 1, # 1 will output the rendered demo directly to YouTube
+                # 1 will output the rendered demo directly to YouTube, 2 is needed for custom channel (though not much
+                # officially documented)
+                'output': 2,
                 'stream_title': title,
                 'stream_description': description,
             }

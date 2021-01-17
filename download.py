@@ -228,7 +228,7 @@ class DownloaderClient(discord.Client):
     async def _post_to_igmdb(self, attachment: Attachment):
         self._check_thread()
         try:
-            await self._uploader.upload(attachment.url, 17, attachment.filename, '')
+            await self._uploader.upload(url=attachment.url, resolution=28, title=attachment.filename, description='')
         except Exception as e:
             self._check_thread()
             await self._after_error(None, e)
