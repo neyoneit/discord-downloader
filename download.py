@@ -234,7 +234,7 @@ class DownloaderClient(discord.Client):
             demo_info = await self._demo_analyzer.analyze(local_filename)
             self._check_thread()
 
-            nick = demo_info['player']['df_name']
+            nick = demo_info['player'].get('uncoloredName') or demo_info['player']['df_name']
             mapname = demo_info['client']['mapname']
             physics = self._extract_physics(demo_info['game']['gameplay'])
             time = demo_info['record']['bestTime']
