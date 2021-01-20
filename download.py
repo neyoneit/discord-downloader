@@ -16,13 +16,14 @@ from discord.abc import Messageable
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
+from discord_downloader.demo_analyzer import DemoAnalyzer
 from discord_downloader.demo_uploaders import DemoUploader, FakeUploader, IgmdbUploader
 from discord_downloader.local_queue import LocallyQueuedUploader
 from discord_downloader.movers import DeduplicatingRenamingMover
 from discord_downloader.persistent_state import StoredState, Savepoint
 from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY, URLS_FILE, TEMP_DIRECTORY, \
     RENDERING_OUTPUT_CHANNEL, IGMDB_TOKEN, RENDERING_DONE_MESSAGE_PREFIX, RENDERING_DONE_MESSAGE_SUFFIX, \
-    IGMDB_POLLING_INTERVAL
+    IGMDB_POLLING_INTERVAL, DEMOCLEANER_EXE
 
 
 def extract_urls(msg):
@@ -36,13 +37,15 @@ class DownloaderClient(discord.Client):
     _output_channels: List[Messageable]
     _dirty=False
 
-    def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, error_log: TextIO):
+    def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, demo_analyzer: DemoAnalyzer,
+                 error_log: TextIO):
         super(DownloaderClient, self).__init__()
         self._uploader = LocallyQueuedUploader(uploader, igmdb_state) if uploader is not None else None
         self.ret = 0
         self._check_thread()
         self._error_log = error_log
         self._prepared = False
+        self._demo_analyzer = demo_analyzer
 
     async def on_ready(self):
         try:
@@ -120,10 +123,10 @@ class DownloaderClient(discord.Client):
             self._check_thread()
         print(f"result url: {url}")
 
-    async def _after_error(self, identifier: Optional[int], e: Exception):
+    async def _after_error(self, identifier: Optional[int], e: Exception, filename: Optional[str] = None):
         self._check_thread()
-        print(f"Logging error for #{identifier}: {e}\n")
-        self._error_log.write(f"Error for #{identifier}: {e}\n")
+        print(f"Logging error for #{identifier} ({filename}): {e}\n")
+        self._error_log.write(f"Error for #{identifier} ({filename}): {e}\n")
         traceback.print_exc(file=self._error_log)
         self._error_log.flush()
 
@@ -215,23 +218,36 @@ class DownloaderClient(discord.Client):
                         self._check_thread()
                         f.flush()
                         os.fsync(f.fileno())
-                    is_new = mover.move(tmp_file, out_file) is not None
+                    new_attachment_filename = mover.move(tmp_file, out_file)
 
-                    if is_new and re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
-                        await self._post_to_igmdb(attachment)
+                    if (new_attachment_filename is not None) and re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
+                        await self._post_to_igmdb(attachment, new_attachment_filename)
                         self._check_thread()
 
-                    print(f"* {attachment} (new: {is_new})")
+                    print(f"* {attachment} (new: {new_attachment_filename})")
                 savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()
 
-    async def _post_to_igmdb(self, attachment: Attachment):
+    async def _post_to_igmdb(self, attachment: Attachment, local_filename: str):
         self._check_thread()
         try:
-            await self._uploader.upload(url=attachment.url, resolution=28, title=attachment.filename, description='')
+            demo_info = await self._demo_analyzer.analyze(local_filename)
+            self._check_thread()
+
+            nick = demo_info['player']['df_name']
+            mapname = demo_info['client']['mapname']
+            physics = self._extract_physics(demo_info['game']['gameplay'])
+            time = demo_info['record']['bestTime']
+
+            await self._uploader.upload(
+                url=attachment.url,
+                resolution=28,
+                title=f"DeFRaG: {nick} {time} {physics} {mapname}",
+                description=f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}",
+            )
         except Exception as e:
             self._check_thread()
-            await self._after_error(None, e)
+            await self._after_error(attachment.id, e, filename=attachment.filename)
         self._check_thread()
 
     def _check_thread(self):
@@ -242,6 +258,13 @@ class DownloaderClient(discord.Client):
         else:
             if self._expected_thread != threading.current_thread():
                 raise Exception(f"Bad Thread: {self._expected_thread} != {threading.current_thread()}")
+
+    def _extract_physics(self, gameplay):
+        match = re.compile('.*\\((.*)\\)$').match(gameplay)
+        if match is None:
+            return gameplay
+        else:
+            return match.group(1)
 
 
 def create_uploader():
@@ -259,7 +282,12 @@ def main():
                 print("Connecting…")
                 upload_queue_json_file = os.path.join(STATE_DIRECTORY, "igmdb-upload-queue.json")
                 igmdb_state = StoredState(upload_queue_json_file, LocallyQueuedUploader.get_default_state())
-                client = DownloaderClient(create_uploader(), igmdb_state, error_log)
+                client = DownloaderClient(
+                    uploader=create_uploader(),
+                    igmdb_state=igmdb_state,
+                    demo_analyzer=DemoAnalyzer(DEMOCLEANER_EXE),
+                    error_log=error_log
+                )
                 client.run(DISCORD_TOKEN)
                 igmdb_state.close()
                 sys.exit(client.ret)

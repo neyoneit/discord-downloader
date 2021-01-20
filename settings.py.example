@@ -27,3 +27,5 @@ RENDERING_OUTPUT_CHANNEL = 'server name--výstupní kanál'  # or RENDERING_OUTP
 RENDERING_DONE_MESSAGE_PREFIX = "New render:\n"
 
 RENDERING_DONE_MESSAGE_SUFFIX = "\nRendered by igmdb"
+
+DEMOCLEANER_EXE = os.path.join(dirname(__file__), 'DemoCleaner3.exe')
