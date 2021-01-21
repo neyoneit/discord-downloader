@@ -38,8 +38,8 @@ class DownloaderClient(discord.Client):
     _dirty=False
 
     def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, demo_analyzer: DemoAnalyzer,
-                 error_log: TextIO):
-        super(DownloaderClient, self).__init__()
+                 error_log: TextIO, loop):
+        super(DownloaderClient, self).__init__(loop=loop)
         self._uploader = LocallyQueuedUploader(uploader, igmdb_state) if uploader is not None else None
         self.ret = 0
         self._check_thread()
@@ -276,6 +276,8 @@ def create_uploader():
 
 
 def main():
+    loop = asyncio.ProactorEventLoop() if sys.platform == 'win32' else asyncio.SelectorEventLoop()
+    asyncio.set_event_loop(loop)
     try:
         with filelock.FileLock(os.path.join(STATE_DIRECTORY, "run.lock")).acquire(timeout=10):
             with open(os.path.join(STATE_DIRECTORY, "errors.log"), "a") as error_log:
@@ -286,7 +288,8 @@ def main():
                     uploader=create_uploader(),
                     igmdb_state=igmdb_state,
                     demo_analyzer=DemoAnalyzer(DEMOCLEANER_EXE),
-                    error_log=error_log
+                    error_log=error_log,
+                    loop=loop,
                 )
                 client.run(DISCORD_TOKEN)
                 igmdb_state.close()
