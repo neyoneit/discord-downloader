@@ -90,7 +90,11 @@ class IgmdbUploader(DemoUploader):
                 resp = json.loads(resp_s)
                 if resp['success']:
                     if resp['output']['status'] == 'Finished':
-                        return f"https://youtu.be/{resp['output']['stream_identifier']}"
+                        stream_identifier = resp['output'].get('donator_stream_identifier') or \
+                                            resp['output']['stream_identifier']
+                        if stream_identifier == "":
+                            raise Exception(f"Empty stream identifier for {resp_s}")
+                        return f"https://youtu.be/{stream_identifier}"
                     else:
                         return None
                 else:
