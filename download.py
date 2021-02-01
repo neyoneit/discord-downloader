@@ -42,6 +42,7 @@ class DownloaderClient(discord.Client):
         super(DownloaderClient, self).__init__(loop=loop)
         self._uploader = LocallyQueuedUploader(uploader, igmdb_state) if uploader is not None else None
         self.ret = 0
+        self._loop = loop
         self._check_thread()
         self._error_log = error_log
         self._prepared = False
@@ -258,6 +259,8 @@ class DownloaderClient(discord.Client):
         else:
             if self._expected_thread != threading.current_thread():
                 raise Exception(f"Bad Thread: {self._expected_thread} != {threading.current_thread()}")
+            if self._loop != asyncio.get_running_loop():
+                raise Exception(f"Bad event loop: {self._loop} != {asyncio.get_running_loop()}")
 
     def _extract_physics(self, gameplay):
         match = re.compile('.*\\((.*)\\)$').match(gameplay)
