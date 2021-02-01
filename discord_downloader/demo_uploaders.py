@@ -89,7 +89,7 @@ class IgmdbUploader(DemoUploader):
                 resp_s = await response.read()
                 resp = json.loads(resp_s)
                 if resp['success']:
-                    if resp['output']['status'] == 'Finished':
+                    if resp['output']['status_final'] == '1':
                         stream_identifier = resp['output'].get('donator_stream_identifier') or \
                                             resp['output']['stream_identifier']
                         if stream_identifier == "":
