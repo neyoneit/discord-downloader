@@ -31,11 +31,9 @@ def extract_urls(msg):
 
 
 class DownloaderClient(discord.Client):
-
     _expected_thread = None
-    _lock = asyncio.Lock()
     _output_channels: List[Messageable]
-    _dirty=False
+    _dirty = False
 
     def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, demo_analyzer: DemoAnalyzer,
                  error_log: TextIO, loop):
@@ -43,6 +41,7 @@ class DownloaderClient(discord.Client):
         self._uploader = LocallyQueuedUploader(uploader, igmdb_state) if uploader is not None else None
         self.ret = 0
         self._loop = loop
+        self._lock = asyncio.Lock(loop=loop)
         self._check_thread()
         self._error_log = error_log
         self._prepared = False
