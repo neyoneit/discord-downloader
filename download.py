@@ -84,6 +84,7 @@ class DownloaderClient(discord.Client):
         traceback.print_exc()
         self._error_log.write("Unhandled error:")
         traceback.print_exc(file=self._error_log)
+        self._loop.stop()
         sys.exit(2)
 
     async def on_message(self, message: Message):
