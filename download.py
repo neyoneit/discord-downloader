@@ -90,18 +90,18 @@ class DownloaderClient(discord.Client):
         if os.environ.get('SIMULATE_EXCEPTION') == '1':
             raise Exception('Simulantenbande!')
         self._check_thread()
-        channel_name = self._reverse_channels.get(message.channel)
-        print(f"new message in channel: {channel_name} ({message.channel})")
-        if channel_name in CHANNELS:
-            if not self._prepared:
-                self._dirty = True
-            else:
+        if not self._prepared:
+            self._dirty = True
+        else:
+            channel_name = self._reverse_channels.get(message.channel)
+            print(f"new message in channel: {channel_name} ({message.channel})")
+            if channel_name in CHANNELS:
                 print("Checking single channel…")
                 await self._download_channel(channel_name, message.channel)
                 self._check_thread()
                 print("done")
-        else:
-            print("I am not interested in this channel!")
+            else:
+                print("I am not interested in this channel!")
 
     async def _check_uploads(self):
         if self._uploader is not None:
