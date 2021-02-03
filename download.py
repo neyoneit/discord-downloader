@@ -88,6 +88,8 @@ class DownloaderClient(discord.Client):
         sys.exit(2)
 
     async def on_message(self, message: Message):
+        if os.environ.get('SIMULATE_EXCEPTION') == '1':
+            raise Exception('Simulantenbande!')
         self._check_thread()
         channel_name = self._reverse_channels.get(message.channel)
         print(f"new message in channel: {channel_name} ({message.channel})")
