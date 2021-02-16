@@ -7,7 +7,7 @@ import threading
 import traceback
 import urllib
 import urllib.parse
-from typing import TextIO, Optional, List
+from typing import TextIO, Optional, List, Dict
 
 import discord
 import filelock
@@ -32,7 +32,7 @@ def extract_urls(msg):
 
 class DownloaderClient(discord.Client):
     _expected_thread = None
-    _output_channels: List[Messageable]
+    _output_channels: Dict[Optional[str], List[Messageable]]
     _dirty = False
 
     def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, demo_analyzer: DemoAnalyzer,
@@ -119,9 +119,9 @@ class DownloaderClient(discord.Client):
                     await self._after_error(None, e)
                     self._check_thread()
 
-    async def _after_upload(self, url: str):
+    async def _after_upload(self, url: str, channel: str):
         self._check_thread()
-        for channel in self._output_channels:
+        for channel in self._output_channels.get(channel, []):
             await channel.send(f"{RENDERING_DONE_MESSAGE_PREFIX}{url}{RENDERING_DONE_MESSAGE_SUFFIX}")
             self._check_thread()
         print(f"result url: {url}")
@@ -140,20 +140,27 @@ class DownloaderClient(discord.Client):
         self._channels = await self._get_channels()
         self._reverse_channels = {v: k for k, v in self._channels.items()}
         self._check_thread()
-        missing = CHANNELS - self._channels.keys()
+        missing = CHANNELS.keys() - self._channels.keys()
         if len(missing) > 0:
             raise Exception(f"Some channels were not found: {missing}")
+        self._output_channels = {
+            # legacy channel
+            None: self._translate_output_channels(RENDERING_OUTPUT_CHANNEL),
+            # new channel
+            **{k: self._translate_output_channels(v) for k, v in CHANNELS.items()}
+        }
 
-        output_channel_names = [RENDERING_OUTPUT_CHANNEL] if isinstance(RENDERING_OUTPUT_CHANNEL, str) else RENDERING_OUTPUT_CHANNEL
+    def _translate_output_channels(self, output_channel_names):
+        output_channel_names_list = [output_channel_names] if isinstance(output_channel_names, str) else output_channel_names
+        return list(map(self._get_output_channel, output_channel_names_list))
 
-        def get_output_channel(name):
-            channel = self._channels.get(name)
-            if channel is None:
-                raise Exception(f"Output channel in RENDERING_OUTPUT_CHANNEL not found: {name}")
-            else:
-                return channel
+    def _get_output_channel(self, name):
+        channel = self._channels.get(name)
+        if channel is None:
+            raise Exception(f"Output channel in RENDERING_OUTPUT_CHANNEL not found: {name}")
+        else:
+            return channel
 
-        self._output_channels = list(map(get_output_channel, output_channel_names))
 
     async def _download_news(self):
         async with self._lock:
@@ -224,14 +231,14 @@ class DownloaderClient(discord.Client):
                     new_attachment_filename = mover.move(tmp_file, out_file)
 
                     if (new_attachment_filename is not None) and re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
-                        await self._post_to_igmdb(attachment, new_attachment_filename)
+                        await self._post_to_igmdb(attachment, new_attachment_filename, name)
                         self._check_thread()
 
                     print(f"* {attachment} (new: {new_attachment_filename})")
                 savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()
 
-    async def _post_to_igmdb(self, attachment: Attachment, local_filename: str):
+    async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str):
         self._check_thread()
         try:
             demo_info = await self._demo_analyzer.analyze(local_filename)
@@ -247,6 +254,7 @@ class DownloaderClient(discord.Client):
                 resolution=28,
                 title=f"DeFRaG: {nick} {time} {physics} {mapname}",
                 description=f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}",
+                additional_data=channel_name
             )
         except Exception as e:
             self._check_thread()

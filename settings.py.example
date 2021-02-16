@@ -4,9 +4,9 @@ from os.path import dirname
 DISCORD_TOKEN='<token>'
 
 CHANNELS={
-    "server name--jeden kanál",
-    "server name--druhej kanál",
-    "server name--třetí kanál",
+    "server name--jeden kanál": ["server-name--výstupní-kanál"],
+    "server name--druhej kanál": ["server-name--výstupní-kanál"],
+    "server name--třetí kanál": ["server-name--jeden-výstupní-kanál", "server-name--druhej-výstupní-kanál"],
 }
 
 STATE_DIRECTORY = os.path.join(dirname(__file__), "state")

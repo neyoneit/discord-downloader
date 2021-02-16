@@ -95,7 +95,7 @@ class LocallyQueuedUploaderTestCase(unittest.TestCase):
 
     def check_single_finished_upload(self):
         self.fake_uploader.check_status = MagicMock(return_value=async_result('https://www.example.com/uploaded_video'))
-        self.assertEqual(self.check_for_done(), [('ok', 'https://www.example.com/uploaded_video')])
+        self.assertEqual(self.check_for_done(), [('ok', 'https://www.example.com/uploaded_video', None)])
         self.fake_uploader.check_status.assert_called_once_with(42863)
 
     def throw_check_status_error(self, _):
@@ -234,8 +234,8 @@ class LocallyQueuedUploaderTestCase(unittest.TestCase):
     def check_for_done(self):
         events = []
 
-        async def done_callback(url):
-            events.append(('ok', url))
+        async def done_callback(url, additional_data):
+            events.append(('ok', url, additional_data))
 
         async def failed_callback(id, e):
             events.append(('error', id, e))
