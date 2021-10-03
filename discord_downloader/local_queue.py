@@ -1,4 +1,4 @@
-from typing import Awaitable, Any
+from typing import Awaitable, Any, Union
 from typing import List, Callable
 
 from discord_downloader.demo_uploaders import DemoUploader, QueueFullException
@@ -74,7 +74,7 @@ class LocallyQueuedUploader:
         self._state.value["queue_full"] = value
 
     @property
-    def _uploaded_queue(self) -> List[int]:
+    def _uploaded_queue(self) -> List[Union[List, int]]:
         return self._state.value['uploaded_queue']
 
     @property
