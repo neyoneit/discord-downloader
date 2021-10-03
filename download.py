@@ -7,7 +7,7 @@ import threading
 import traceback
 import urllib
 import urllib.parse
-from typing import TextIO, Optional, List, Dict
+from typing import TextIO, Optional, List, Dict, Tuple
 
 import discord
 import filelock
@@ -116,17 +116,31 @@ class DownloaderClient(discord.Client):
                     await self._uploader.retry_uploads()
                     self._check_thread()
                 except Exception as e:
-                    await self._after_error(None, e)
+                    await self._after_error(None, e, None)
                     self._check_thread()
 
-    async def _after_upload(self, url: str, channel: str):
+    async def _after_upload(self, url: str, channel_and_message_id):
+        [in_channel, message_id] = self._reconstruct_channel_and_message_id(channel_and_message_id)
         self._check_thread()
-        for channel in self._output_channels.get(channel, []):
-            await channel.send(f"{RENDERING_DONE_MESSAGE_PREFIX}{url}{RENDERING_DONE_MESSAGE_SUFFIX}")
+        for channel in self._output_channels.get(in_channel, []):
+            print(f"Fetching message {message_id} in channel {channel}")
+            if message_id is not None:
+                try:
+                    origial_message_ref = (await channel.fetch_message(message_id)).to_reference()
+                    print(f"Fetched: {origial_message_ref}")
+                except discord.errors.NotFound as e:
+                    print(f"Cannot find message {message_id}: {e}")
+                    origial_message_ref = None  # fallback
+            else:
+                origial_message_ref = None
+            await channel.send(
+                content=f"{RENDERING_DONE_MESSAGE_PREFIX}{url}{RENDERING_DONE_MESSAGE_SUFFIX}",
+                reference=origial_message_ref
+            )
             self._check_thread()
         print(f"result url: {url}")
 
-    async def _after_error(self, identifier: Optional[int], e: Exception, filename: Optional[str] = None):
+    async def _after_error(self, identifier: Optional[int], e: Exception, channel_and_message_id, filename: Optional[str] = None):
         self._check_thread()
         print(f"Logging error for #{identifier} ({filename}): {e}\n")
         self._error_log.write(f"Error for #{identifier} ({filename}): {e}\n")
@@ -231,15 +245,16 @@ class DownloaderClient(discord.Client):
                     new_attachment_filename = mover.move(tmp_file, out_file)
 
                     if (new_attachment_filename is not None) and re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
-                        await self._post_to_igmdb(attachment, new_attachment_filename, name)
+                        await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
                         self._check_thread()
 
                     print(f"* {attachment} (new: {new_attachment_filename})")
                 savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
         savepoint.close()
 
-    async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str):
+    async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str, message: Message):
         self._check_thread()
+        additional_data = [channel_name, message.id]
         try:
             demo_info = await self._demo_analyzer.analyze(local_filename)
             self._check_thread()
@@ -254,11 +269,11 @@ class DownloaderClient(discord.Client):
                 resolution=28,
                 title=f"DeFRaG: {nick} {time} {physics} {mapname}",
                 description=f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}",
-                additional_data=channel_name
+                additional_data=additional_data
             )
         except Exception as e:
             self._check_thread()
-            await self._after_error(attachment.id, e, filename=attachment.filename)
+            await self._after_error(attachment.id, e, additional_data, filename=attachment.filename)
         self._check_thread()
 
     def _check_thread(self):
@@ -278,6 +293,12 @@ class DownloaderClient(discord.Client):
             return gameplay
         else:
             return match.group(1)
+
+    def _reconstruct_channel_and_message_id(self, channel_and_message_id):
+        if isinstance(channel_and_message_id, list):
+            return channel_and_message_id
+        else:
+            return [channel_and_message_id, message_id]
 
 
 def create_uploader():

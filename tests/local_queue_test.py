@@ -237,7 +237,7 @@ class LocallyQueuedUploaderTestCase(unittest.TestCase):
         async def done_callback(url, additional_data):
             events.append(('ok', url, additional_data))
 
-        async def failed_callback(id, e):
+        async def failed_callback(id, e, data):
             events.append(('error', id, e))
 
         sync(self.lqu.check_for_done(done_callback, failed_callback))

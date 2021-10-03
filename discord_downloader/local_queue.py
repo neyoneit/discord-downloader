@@ -27,7 +27,7 @@ class LocallyQueuedUploader:
         self._state.flush()
 
     async def check_for_done(self, done_callback: Callable[[str, Any], Awaitable[None]],
-                             failed_callback: Callable[[int, Exception], Awaitable[None]]):
+                             failed_callback: Callable[[int, Exception, Any], Awaitable[None]]):
         for item in self._uploaded_queue:
             if isinstance(item, list):
                 [id, additional_data] = item
@@ -41,7 +41,7 @@ class LocallyQueuedUploader:
                     self._uploaded_queue.remove(item)
                     self._state.flush()
             except Exception as e:
-                await failed_callback(id, e)
+                await failed_callback(id, e, additional_data)
                 self._uploaded_queue.remove(item)
                 self._state.flush()
 
