@@ -1,7 +1,13 @@
 import abc
+import asyncio
+import datetime
 import json
+import os.path
 import random
-from typing import NamedTuple, Optional
+import subprocess
+import uuid
+from abc import abstractmethod
+from typing import NamedTuple, Optional, List
 
 from aiohttp import ClientSession
 
@@ -46,6 +52,57 @@ class ProbablyAlreadyUploadedException(UploadException):
     def __init__(self, url) -> None:
         super().__init__(f'Upload seems to have been already submitted: {url}')
 
+
+class RenderedDemoUploader(abc.ABC):
+
+    @abstractmethod
+    async def upload(self, title: str, description: str, file: str):
+        pass
+
+
+class YoutubeUploader(RenderedDemoUploader):
+
+    def __init__(self, youtube_uploader_executable: str, youtube_uploader_params: List[str]):
+        self._youtube_uploader_executable = youtube_uploader_executable
+        self._youtube_uploader_params = youtube_uploader_params
+
+    async def upload(self, title: str, description: str, file: str):
+        proc: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
+            self._youtube_uploader_executable,
+            *self._youtube_uploader_params,
+            f"--description={description}",
+            f"--title={title}",
+            "--",
+            file,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        try:
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                res = stdout.split(b'[RequestError] Server response:', 1)
+                if len(res) == 2:
+                    [_prefix, json_message] = res
+                    msg = json.loads(json_message)
+                    raise VideoUploadException(msg)
+                else:
+                    raise VideoUploadException(f'YT uploader: Bad return errorcode {proc.returncode}')
+            if stderr not in [b'']:
+                raise VideoUploadException("Error when uploading video: " + str(stderr))
+            stream_identifier = stdout.splitlines()[-1].decode('ASCII')
+            return f"https://youtu.be/{stream_identifier}"
+        finally:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+
+
+class VideoUploadException(Exception):
+
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
 
 class IgmdbUploader(DemoUploader):
 

@@ -1,0 +1,18 @@
+Using client secrets: /home/user/v/credentials.json
+Using credentials file: /home/user/v/user-credentials.json
+Start upload: /home/user/v/out-1000-0.webm
+Rate limiter: <youtube_upload.rate_limit.NoRateLimiter object at 0x7e8381705400>
+Resource
+[RequestError] Server response: {
+  "error": {
+    "code": 403,
+    "message": "The request cannot be completed because you have exceeded your \u003ca href=\"/youtube/v3/getting-started#quota\"\u003equota\u003c/a\u003e.",
+    "errors": [
+      {
+        "message": "The request cannot be completed because you have exceeded your \u003ca href=\"/youtube/v3/getting-started#quota\"\u003equota\u003c/a\u003e.",
+        "domain": "youtube.quota",
+        "reason": "quotaExceeded"
+      }
+    ]
+  }
+}
