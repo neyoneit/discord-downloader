@@ -4,9 +4,11 @@ import datetime
 import json
 import os.path
 import random
+import shutil
 import subprocess
 import uuid
 from abc import abstractmethod
+from os import path
 from typing import NamedTuple, Optional, List
 
 from aiohttp import ClientSession
@@ -60,6 +62,12 @@ class RenderedDemoUploader(abc.ABC):
         pass
 
 
+class DemoRenderer(abc.ABC):
+    @abstractmethod
+    async def render(self, demo_file: str) -> str:
+        pass
+
+
 class YoutubeUploader(RenderedDemoUploader):
 
     def __init__(self, youtube_uploader_executable: str, youtube_uploader_params: List[str]):
@@ -103,6 +111,58 @@ class VideoUploadException(Exception):
     def __init__(self, message):
         super().__init__()
         self.message = message
+
+
+class OdfeDemoRenderer(DemoRenderer):
+
+    def __init__(self, odfe_dir: str, odfe_executable: str, config_dir: str, demo_dir: str, video_dir: str,
+                 defrag_config: str):
+        self._odfe_dir = odfe_dir
+        self._odfe_executable = odfe_executable
+        self._config_dir = config_dir
+        self._demo_dir = demo_dir
+        self._video_dir = video_dir
+        self._defrag_config = defrag_config
+
+    async def render(self, demo_file: str) -> str:
+        id = f"{datetime.datetime.now().timestamp()}-{uuid.uuid4().hex}"
+        demo_tmp_file = os.path.join(self._demo_dir, f"{id}")
+        shutil.copy(demo_file, demo_tmp_file)
+        cfg_file_content = "".join(map(lambda x: x+"\n", [
+            self._defrag_config,
+            f'demo "{id}"',
+            f'video-pipe "{id}"',
+            'set nextdemo "wait 100; quit"',
+        ]))
+        cfg_bare_file_name = f"file-{id}.cfg"
+        cfg_file_name = os.path.join(self._config_dir, cfg_bare_file_name)
+        with open(cfg_file_name, "w") as f:
+            f.write(cfg_file_content)
+        proc: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
+            path.join(self._odfe_dir, self._odfe_executable),
+            "+exec",
+            cfg_bare_file_name,
+            cwd=self._odfe_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        try:
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                raise Exception(
+                    f'Demo renderer: Bad return errorcode {proc.returncode}; stdout {stdout}; stderr {stderr}')
+            #if stderr not in [b'']:
+            #    raise Exception("Error when rendering video: " + str(stderr))
+        finally:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            os.remove(cfg_file_name)
+            os.remove(demo_tmp_file)
+
+        return os.path.join(self._video_dir, f"{id}.mp4")
+
 
 class IgmdbUploader(DemoUploader):
 
