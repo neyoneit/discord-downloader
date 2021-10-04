@@ -64,7 +64,7 @@ class RenderedDemoUploader(abc.ABC):
 
 class DemoRenderer(abc.ABC):
     @abstractmethod
-    async def render(self, demo_file: str) -> str:
+    async def render(self, demo_data: bytes) -> str:
         pass
 
 
@@ -124,10 +124,11 @@ class OdfeDemoRenderer(DemoRenderer):
         self._video_dir = video_dir
         self._defrag_config = defrag_config
 
-    async def render(self, demo_file: str) -> str:
+    async def render(self, demo_data: bytes) -> str:
         id = f"{datetime.datetime.now().timestamp()}-{uuid.uuid4().hex}"
         demo_tmp_file = os.path.join(self._demo_dir, f"{id}")
-        shutil.copy(demo_file, demo_tmp_file)
+        with open(demo_tmp_file, 'wb') as f:
+            f.write(demo_data)
         cfg_file_content = "".join(map(lambda x: x+"\n", [
             self._defrag_config,
             f'demo "{id}"',

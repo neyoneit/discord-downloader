@@ -10,6 +10,7 @@ RUN ln -s /opt/dldr/download.py /usr/bin/download
 
 FROM env_base_bare AS discord_downloader_run
 COPY *.py DemoCleaner3.* /opt/dldr/
+COPY stubs/ /opt/dldr/stubs
 RUN chmod +x /opt/dldr/DemoCleaner3.sh
 COPY discord_downloader/ /opt/dldr/discord_downloader
 ENV DISPLAY=:5

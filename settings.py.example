@@ -18,6 +18,8 @@ TEMP_DIRECTORY = os.path.join(dirname(__file__), "out", "tmp")
 
 URLS_FILE = os.path.join(dirname(__file__), "out", "urls.txt")
 
+DEMO_RENDERING_PROVIDER = 'local-rendering'  # 'local-rendering' or 'igmdb'
+
 IGMDB_TOKEN = '…'  # obtain token from https://www.igmdb.org/?page=usercp
 
 IGMDB_POLLING_INTERVAL = 5*60  # seconds
@@ -28,4 +30,25 @@ RENDERING_DONE_MESSAGE_PREFIX = "New render:\n"
 
 RENDERING_DONE_MESSAGE_SUFFIX = "\nRendered by igmdb"
 
-DEMOCLEANER_EXE = os.path.join(dirname(__file__), 'DemoCleaner3.exe')
+DEMOCLEANER_EXE = os.path.join(dirname(__file__), 'DemoCleaner3.exe')DEMO_RENDERING_LOCAL_PUBLISHING_DELAY = timedelta(minutes=0.01)
+
+DEMO_RENDERING_LOCAL_ODFE_DIR = 'c:\\path\\to\\odfe\\dir'  # path to oDFe
+
+DEMO_RENDERING_LOCAL_ODFE_EXECUTABLE = 'oDFe.x64.exe'
+
+DEMO_RENDERING_LOCAL_ODFE_CONFIG = 'c:\\odfe\\config'  # path to oDFe config dir
+
+DEMO_RENDERING_LOCAL_ODFE_DEMO = 'c:\\odfe\\demo'  # path to oDFe demo dir
+
+DEMO_RENDERING_LOCAL_ODFE_VIDEO = 'c:\\odfe\\video-output'  # path to oDFe video dir
+
+DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX = ''  # config prefix for oDFe
+
+DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE = 'c:\\youtube-upload\\bin\\youtube-upload.bat'
+
+DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS = [
+    '--client-secrets', '/home/user/v/credentials.json',  # client id
+    '--credentials-file', '/home/user/v/user-credentials.json',  # path to credentials file
+    '--chunksize=262144',  # minimum chunk size for YT is 262144
+    '--rate-limit=352144', # max upload rate
+]

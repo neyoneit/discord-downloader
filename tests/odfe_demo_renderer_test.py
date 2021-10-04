@@ -31,7 +31,7 @@ class OdfeDemoRendererTestCase(unittest.TestCase):
                 video_dir=video_dir,
                 defrag_config="// prefix"
             )
-            res = run(renderer.render(path.join(dn, 'empty.dm')))
+            res = run(renderer.render(b''))
             os.remove(fake_odfe_file)
             os.remove(res)
             for dir in tmpdirs:

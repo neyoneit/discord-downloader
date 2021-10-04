@@ -17,13 +17,19 @@ from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
 from discord_downloader.demo_analyzer import DemoAnalyzer
-from discord_downloader.demo_uploaders import DemoUploader, FakeUploader, IgmdbUploader
-from discord_downloader.local_queue import LocallyQueuedUploader
+from discord_downloader.demo_uploaders import DemoUploader, FakeUploader, IgmdbUploader, OdfeDemoRenderer, \
+    YoutubeUploader
+from discord_downloader.local_queue import LocallyQueuedUploader, AutonomousRenderingQueue, PollingRenderingQueue, \
+    RenderingQueue
+from discord_downloader.local_rendering_queue import LocalRenderingQueue
 from discord_downloader.movers import DeduplicatingRenamingMover
 from discord_downloader.persistent_state import StoredState, Savepoint
 from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIRECTORY, URLS_FILE, TEMP_DIRECTORY, \
     RENDERING_OUTPUT_CHANNEL, IGMDB_TOKEN, RENDERING_DONE_MESSAGE_PREFIX, RENDERING_DONE_MESSAGE_SUFFIX, \
-    IGMDB_POLLING_INTERVAL, DEMOCLEANER_EXE
+    IGMDB_POLLING_INTERVAL, DEMOCLEANER_EXE, DEMO_RENDERING_PROVIDER, DEMO_RENDERING_LOCAL_PUBLISHING_DELAY, \
+    DEMO_RENDERING_LOCAL_ODFE_DIR, DEMO_RENDERING_LOCAL_ODFE_EXECUTABLE, DEMO_RENDERING_LOCAL_ODFE_CONFIG, \
+    DEMO_RENDERING_LOCAL_ODFE_DEMO, DEMO_RENDERING_LOCAL_ODFE_VIDEO, DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX, \
+    DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS
 
 
 def extract_urls(msg):
@@ -35,10 +41,10 @@ class DownloaderClient(discord.Client):
     _output_channels: Dict[Optional[str], List[Messageable]]
     _dirty = False
 
-    def __init__(self, uploader: DemoUploader, igmdb_state: StoredState, demo_analyzer: DemoAnalyzer,
+    def __init__(self, uploader: RenderingQueue, demo_analyzer: DemoAnalyzer,
                  error_log: TextIO, loop):
         super(DownloaderClient, self).__init__(loop=loop)
-        self._uploader = LocallyQueuedUploader(uploader, igmdb_state) if uploader is not None else None
+        self._uploader = uploader
         self.ret = 0
         self._loop = loop
         self._lock = asyncio.Lock(loop=loop)
@@ -46,6 +52,10 @@ class DownloaderClient(discord.Client):
         self._error_log = error_log
         self._prepared = False
         self._demo_analyzer = demo_analyzer
+        if not self._uploader.needs_polling():
+            self._uploader: AutonomousRenderingQueue
+            self._uploader.add_done_callback(self._after_upload)
+            self._uploader.add_fail_callback(self._after_error)
 
     async def on_ready(self):
         try:
@@ -64,12 +74,18 @@ class DownloaderClient(discord.Client):
                     await self._download_news()
                     self._check_thread()
                     self._dirty = False
-                while True:
-                    self._check_thread()
-                    await asyncio.sleep(IGMDB_POLLING_INTERVAL)
-                    self._check_thread()
-                    await self._check_uploads()
-                    self._check_thread()
+                if self._uploader.needs_polling():
+                    self._uploader: PollingRenderingQueue
+                    while True:
+                        self._check_thread()
+                        await asyncio.sleep(IGMDB_POLLING_INTERVAL)
+                        self._check_thread()
+                        await self._check_uploads()
+                        self._check_thread()
+                else:
+                    self._uploader: AutonomousRenderingQueue
+                    await self._uploader.run()
+
 
             finally:
                 await self.logout()
@@ -104,7 +120,8 @@ class DownloaderClient(discord.Client):
                 print("I am not interested in this channel!")
 
     async def _check_uploads(self):
-        if self._uploader is not None:
+        if self._uploader is not None and self._uploader.needs_polling():
+            self._uploader: PollingRenderingQueue
             async with self._lock:
                 self._check_thread()
                 try:
@@ -298,15 +315,45 @@ class DownloaderClient(discord.Client):
         if isinstance(channel_and_message_id, list):
             return channel_and_message_id
         else:
-            return [channel_and_message_id, message_id]
+            return [channel_and_message_id, None]
 
 
-def create_uploader():
+def create_igmdb_uploader():
     if IGMDB_TOKEN is not None:
         if IGMDB_TOKEN == 'fake-uploader':
             return FakeUploader()
         else:
             return IgmdbUploader(IGMDB_TOKEN)
+
+
+def create_uploader() -> Tuple[StoredState, RenderingQueue]:
+    if DEMO_RENDERING_PROVIDER == 'igmdb':
+        up = create_igmdb_uploader()
+        upload_queue_json_file = os.path.join(STATE_DIRECTORY, "igmdb-upload-queue.json")
+        igmdb_state = StoredState(upload_queue_json_file, LocallyQueuedUploader.get_default_state())
+        return igmdb_state, (LocallyQueuedUploader(up, igmdb_state) if up is not None else None)
+    elif DEMO_RENDERING_PROVIDER == 'local-rendering':
+        upload_queue_json_file = os.path.join(STATE_DIRECTORY, "local-rendering-queue.json")
+        local_queue_state = StoredState(upload_queue_json_file, LocalRenderingQueue.get_default_state())
+        queue = LocalRenderingQueue(
+            demo_renderer=OdfeDemoRenderer(
+                odfe_dir=DEMO_RENDERING_LOCAL_ODFE_DIR,
+                odfe_executable=DEMO_RENDERING_LOCAL_ODFE_EXECUTABLE,
+                config_dir=DEMO_RENDERING_LOCAL_ODFE_CONFIG,
+                demo_dir=DEMO_RENDERING_LOCAL_ODFE_DEMO,
+                video_dir=DEMO_RENDERING_LOCAL_ODFE_VIDEO,
+                defrag_config=DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX
+            ),
+            rendered_demo_uploader=YoutubeUploader(
+                youtube_uploader_executable=DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE,
+                youtube_uploader_params=DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS
+            ),
+            state=local_queue_state,
+            delay_before_publishing=DEMO_RENDERING_LOCAL_PUBLISHING_DELAY
+        )
+        return local_queue_state, queue
+    elif DEMO_RENDERING_PROVIDER is not None:
+        raise Exception(f"Unexpected DEMO_RENDERING_PROVIDER: {DEMO_RENDERING_PROVIDER}")
 
 
 def main():
@@ -316,17 +363,15 @@ def main():
         with filelock.FileLock(os.path.join(STATE_DIRECTORY, "run.lock")).acquire(timeout=10):
             with open(os.path.join(STATE_DIRECTORY, "errors.log"), "a") as error_log:
                 print("Connecting…")
-                upload_queue_json_file = os.path.join(STATE_DIRECTORY, "igmdb-upload-queue.json")
-                igmdb_state = StoredState(upload_queue_json_file, LocallyQueuedUploader.get_default_state())
+                state, uploader = create_uploader()
                 client = DownloaderClient(
-                    uploader=create_uploader(),
-                    igmdb_state=igmdb_state,
+                    uploader=uploader,
                     demo_analyzer=DemoAnalyzer(DEMOCLEANER_EXE),
                     error_log=error_log,
                     loop=loop,
                 )
                 client.run(DISCORD_TOKEN)
-                igmdb_state.close()
+                state.close()
                 sys.exit(client.ret)
     except filelock.Timeout:
         print("Unable to acquire lock. It looks like this process is already running…")
