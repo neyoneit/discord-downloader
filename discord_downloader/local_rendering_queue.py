@@ -59,7 +59,7 @@ class LocalRenderingQueue(AutonomousRenderingQueue):
         coros = [self._run_rendering(), self._run_uploads(), self._run_publishing()]
         loop = asyncio.get_running_loop()
         tasks = list(map(lambda c: loop.create_task(c), coros))
-        await asyncioF(tasks, return_when=FIRST_EXCEPTION)
+        await asyncio.wait(tasks, return_when=FIRST_EXCEPTION)
         for task in tasks:
             task.cancel()
             await task

@@ -7,18 +7,19 @@ import threading
 import traceback
 import urllib
 import urllib.parse
+from os.path import basename
 from typing import TextIO, Optional, List, Dict, Tuple
 
 import discord
 import filelock
-from discord import Message, Attachment
+from discord import Message, Attachment, File
 from discord.abc import Messageable
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
 from discord_downloader.demo_analyzer import DemoAnalyzer
 from discord_downloader.demo_uploaders import DemoUploader, FakeUploader, IgmdbUploader, OdfeDemoRenderer, \
-    YoutubeUploader
+    YoutubeUploader, VideoUploadException
 from discord_downloader.local_queue import LocallyQueuedUploader, AutonomousRenderingQueue, PollingRenderingQueue, \
     RenderingQueue
 from discord_downloader.local_rendering_queue import LocalRenderingQueue
@@ -159,7 +160,36 @@ class DownloaderClient(discord.Client):
 
     async def _after_error(self, identifier: Optional[int], e: Exception, channel_and_message_id, filename: Optional[str] = None):
         self._check_thread()
-        print(f"Logging error for #{identifier} ({filename}): {e}\n")
+        if isinstance(e, VideoUploadException):
+            print("Video upload failed; uploading directly to Discord")
+            try:
+                print('reconstruct')
+                [in_channel, message_id] = self._reconstruct_channel_and_message_id(channel_and_message_id)
+                self._check_thread()
+                for channel in self._output_channels.get(in_channel, []):
+                    print(f'get message ref {channel} {message_id}')
+                    channel: Messageable
+                    try:
+                        origial_message_ref = (
+                            await channel.fetch_message(message_id)).to_reference() if message_id is not None else None
+                    except discord.errors.NotFound as nfe:
+                        origial_message_ref = None
+                    print(f'before send {channel} {type(channel)} {e.video_file} {origial_message_ref}.')
+                    print(f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}")
+                    with open(e.video_file, 'rb') as fp:
+                        await channel.send(
+                            content=f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}",
+                            file=File(fp, filename),
+                            reference=origial_message_ref
+                        )
+                    print('after send')
+                return
+            except Exception as e:
+                print(os.listdir('/tmp'))
+                print(f"Exception in error handler: {e}")
+                await self._after_error(identifier, e, channel_and_message_id, filename)
+
+        print(f"Logging error for #{identifier} ({filename}; {channel_and_message_id}): {e}\n")
         self._error_log.write(f"Error for #{identifier} ({filename}): {e}\n")
         traceback.print_exc(file=self._error_log)
         self._error_log.flush()

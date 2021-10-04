@@ -92,11 +92,11 @@ class YoutubeUploader(RenderedDemoUploader):
                 if len(res) == 2:
                     [_prefix, json_message] = res
                     msg = json.loads(json_message)
-                    raise VideoUploadException(msg)
+                    raise VideoUploadException(msg, file)
                 else:
-                    raise VideoUploadException(f'YT uploader: Bad return errorcode {proc.returncode}')
+                    raise VideoUploadException(f'YT uploader: Bad return errorcode {proc.returncode}', file)
             if stderr not in [b'']:
-                raise VideoUploadException("Error when uploading video: " + str(stderr))
+                raise VideoUploadException("Error when uploading video: " + str(stderr), file)
             stream_identifier = stdout.splitlines()[-1].decode('ASCII')
             return f"https://youtu.be/{stream_identifier}"
         finally:
@@ -108,9 +108,10 @@ class YoutubeUploader(RenderedDemoUploader):
 
 class VideoUploadException(Exception):
 
-    def __init__(self, message):
-        super().__init__()
+    def __init__(self, message, video_file):
+        super().__init__((message, video_file))
         self.message = message
+        self.video_file = video_file
 
 
 class OdfeDemoRenderer(DemoRenderer):
