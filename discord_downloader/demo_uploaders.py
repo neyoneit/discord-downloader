@@ -7,9 +7,11 @@ import random
 import re
 import shutil
 import subprocess
+import tempfile
 import uuid
 from abc import abstractmethod
 from os import path
+from tempfile import NamedTemporaryFile
 from typing import NamedTuple, Optional, List
 
 from aiohttp import ClientSession
@@ -76,38 +78,50 @@ class YoutubeUploader(RenderedDemoUploader):
         self._youtube_uploader_params = youtube_uploader_params
 
     async def upload(self, title: str, description: str, file: str):
-        call = [
-            self._youtube_uploader_executable,
-            *self._youtube_uploader_params,
-            f"--description={description}",
-            f"--title={title}",
-            "--",
-            file
-        ]
-        print(f'YOutube upload call: {call}')
-        proc: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
-            *call,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
         try:
-            stdout, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                res = stdout.split(b'[RequestError] Server response:', 1)
-                if len(res) == 2:
-                    [_prefix, json_message] = res
-                    msg = json.loads(json_message)
-                    raise VideoUploadException(msg, file)
-                else:
-                    raise VideoUploadException(f'YT uploader: Bad return errorcode {proc.returncode}; stdout: {stdout}, stderr: {stderr}', file)
-            # if stderr not in [b'']:
-            #    raise VideoUploadException("Error when uploading video: " + str(stderr), file)
-            stream_identifier = stdout.splitlines()[-1].decode('ASCII')
-            return f"https://youtu.be/{stream_identifier}"
+            description_file = None
+            with NamedTemporaryFile(delete=False, ) as tf:
+                tf.write(description.encode("utf-8"))
+                description_file = tf.name
+            call = [
+                self._youtube_uploader_executable,
+                *self._youtube_uploader_params,
+                f"--description-file={description_file}",
+                f"--title={title}",
+                "--",
+                file
+            ]
+            print(f'YouTube upload call: {call}')
+            proc: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
+                *call,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            try:
+                stdout, stderr = await proc.communicate()
+                if proc.returncode != 0:
+                    res = stdout.split(b'[RequestError] Server response:', 1)
+                    if len(res) == 2:
+                        [_prefix, json_message] = res
+                        msg = json.loads(json_message)
+                        raise VideoUploadException(msg, file)
+                    else:
+                        raise VideoUploadException(f'YT uploader: Bad return errorcode {proc.returncode}; stdout: {stdout}, stderr: {stderr}; call: {call}', file)
+                # if stderr not in [b'']:
+                #    raise VideoUploadException("Error when uploading video: " + str(stderr), file)
+                stream_identifier = stdout.splitlines()[-1].decode('ASCII')
+                return f"https://youtu.be/{stream_identifier}"
+            finally:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                await proc.wait()
         finally:
             try:
-                proc.kill()
-            except ProcessLookupError:
+                if description_file is not None:
+                    os.remove(description_file)
+            except FileNotFoundError:
                 pass
 
 
