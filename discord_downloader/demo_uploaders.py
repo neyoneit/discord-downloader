@@ -185,10 +185,15 @@ class OdfeDemoRenderer(DemoRenderer):
                 proc.kill()
             except ProcessLookupError:
                 pass
+            await proc.wait()
             os.remove(cfg_file_name)
             # os.remove(demo_tmp_file)
 
-        return os.path.join(self._video_dir, video_file_basename)
+        video_file = os.path.join(self._video_dir, video_file_basename)
+        if path.exists(video_file):
+            return video_file
+        else:
+            raise Exception(f'Demo renderer: Rendering of {demo_filename} has failed, {video_file} was not created')
 
 
 class IgmdbUploader(DemoUploader):
