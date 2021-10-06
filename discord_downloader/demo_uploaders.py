@@ -133,8 +133,8 @@ class VideoUploadException(Exception):
         self.video_file = video_file
 
 
-
 DEMO_EXT_REGEX = re.compile(".*\\.(dm_6[0-9])$")
+
 
 class OdfeDemoRenderer(DemoRenderer):
 
