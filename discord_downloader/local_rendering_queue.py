@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import traceback
 from asyncio import Event, FIRST_EXCEPTION
 from datetime import timedelta
 from typing import List, Callable, Any, Awaitable
@@ -115,7 +116,12 @@ class LocalRenderingQueue(AutonomousRenderingQueue):
 
     async def _report_error(self, id: int, e: Exception, additional_data: Any):
         for fail_callback in self._fail_callbacks:
-            await fail_callback(id, e, additional_data)
+            try:
+                await fail_callback(id, e, additional_data)
+            except BaseException as e:
+                print(f"LocalRenderingQueue: Exception in fail callback {fail_callback}: {e}")
+                traceback.print_exc()
+                raise
 
     @classmethod
     def get_default_state(cls):
