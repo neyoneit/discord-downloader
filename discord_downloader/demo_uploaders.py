@@ -4,6 +4,7 @@ import datetime
 import json
 import os.path
 import random
+import re
 import shutil
 import subprocess
 import uuid
@@ -64,7 +65,7 @@ class RenderedDemoUploader(abc.ABC):
 
 class DemoRenderer(abc.ABC):
     @abstractmethod
-    async def render(self, demo_data: bytes) -> str:
+    async def render(self, demo_filename: str, demo_data: bytes) -> str:
         pass
 
 
@@ -114,6 +115,9 @@ class VideoUploadException(Exception):
         self.video_file = video_file
 
 
+
+DEMO_EXT_REGEX = re.compile(".*\\.(dm_6[0-9])$")
+
 class OdfeDemoRenderer(DemoRenderer):
 
     def __init__(self, odfe_dir: str, odfe_executable: str, config_dir: str, demo_dir: str, video_dir: str,
@@ -125,14 +129,16 @@ class OdfeDemoRenderer(DemoRenderer):
         self._video_dir = video_dir
         self._defrag_config = defrag_config
 
-    async def render(self, demo_data: bytes) -> str:
+    async def render(self, demo_filename: str, demo_data: bytes) -> str:
         id = f"{datetime.datetime.now().timestamp()}-{uuid.uuid4().hex}"
-        demo_tmp_file = os.path.join(self._demo_dir, f"{id}")
+        demo_ext = DEMO_EXT_REGEX.match(demo_filename).group(1)
+        demo_tmp_basename = f"{id}.{demo_ext}"
+        demo_tmp_file = os.path.join(self._demo_dir, demo_tmp_basename)
         with open(demo_tmp_file, 'wb') as f:
             f.write(demo_data)
         cfg_file_content = "".join(map(lambda x: x+"\n", [
             self._defrag_config,
-            f'demo "{id}"',
+            f'demo "{demo_tmp_basename}"',
             f'video-pipe "{id}"',
             'set nextdemo "wait 100; quit"',
         ]))

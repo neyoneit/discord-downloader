@@ -73,7 +73,7 @@ class LocalRenderingQueue(AutonomousRenderingQueue):
             async with ClientSession() as session:
                 try:
                     resp = await session.get(url)
-                    video_file = await self._demo_renderer.render(await resp.read())
+                    video_file = await self._demo_renderer.render(url, await resp.read())
                     self._upload_queue.append([url, video_file, title, description, additional_data])
                 except Exception as e:
                     await self._report_error(url, e, additional_data)
