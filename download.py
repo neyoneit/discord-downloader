@@ -161,7 +161,7 @@ class DownloaderClient(discord.Client):
     async def _after_error(self, identifier: Optional[int], e: Exception, channel_and_message_id, filename: Optional[str] = None):
         self._check_thread()
         if isinstance(e, VideoUploadException):
-            print("Video upload failed; uploading directly to Discord")
+            print(f"Video upload failed; uploading directly to Discord: {e}")
             try:
                 print('reconstruct')
                 [in_channel, message_id] = self._reconstruct_channel_and_message_id(channel_and_message_id)

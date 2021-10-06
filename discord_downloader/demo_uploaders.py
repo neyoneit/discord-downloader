@@ -76,13 +76,17 @@ class YoutubeUploader(RenderedDemoUploader):
         self._youtube_uploader_params = youtube_uploader_params
 
     async def upload(self, title: str, description: str, file: str):
-        proc: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
+        call = [
             self._youtube_uploader_executable,
             *self._youtube_uploader_params,
             f"--description={description}",
             f"--title={title}",
             "--",
-            file,
+            file
+        ]
+        print(f'YOutube upload call: {call}')
+        proc: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
+            *call,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
@@ -95,9 +99,9 @@ class YoutubeUploader(RenderedDemoUploader):
                     msg = json.loads(json_message)
                     raise VideoUploadException(msg, file)
                 else:
-                    raise VideoUploadException(f'YT uploader: Bad return errorcode {proc.returncode}', file)
-            if stderr not in [b'']:
-                raise VideoUploadException("Error when uploading video: " + str(stderr), file)
+                    raise VideoUploadException(f'YT uploader: Bad return errorcode {proc.returncode}; stdout: {stdout}, stderr: {stderr}', file)
+            # if stderr not in [b'']:
+            #    raise VideoUploadException("Error when uploading video: " + str(stderr), file)
             stream_identifier = stdout.splitlines()[-1].decode('ASCII')
             return f"https://youtu.be/{stream_identifier}"
         finally:
@@ -134,12 +138,13 @@ class OdfeDemoRenderer(DemoRenderer):
         demo_ext = DEMO_EXT_REGEX.match(demo_filename).group(1)
         demo_tmp_basename = f"{id}.{demo_ext}"
         demo_tmp_file = os.path.join(self._demo_dir, demo_tmp_basename)
+        video_file_basename = f"{id}.mp4"
         with open(demo_tmp_file, 'wb') as f:
             f.write(demo_data)
         cfg_file_content = "".join(map(lambda x: x+"\n", [
             self._defrag_config,
             f'demo "{demo_tmp_basename}"',
-            f'video-pipe "{id}"',
+            f'video-pipe "{video_file_basename}"',
             'set nextdemo "wait 100; quit"',
         ]))
         cfg_bare_file_name = f"file-{id}.cfg"
@@ -167,9 +172,9 @@ class OdfeDemoRenderer(DemoRenderer):
             except ProcessLookupError:
                 pass
             os.remove(cfg_file_name)
-            os.remove(demo_tmp_file)
+            # os.remove(demo_tmp_file)
 
-        return os.path.join(self._video_dir, f"{id}.mp4")
+        return os.path.join(self._video_dir, video_file_basename)
 
 
 class IgmdbUploader(DemoUploader):

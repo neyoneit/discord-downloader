@@ -30,7 +30,9 @@ RENDERING_DONE_MESSAGE_PREFIX = "New render:\n"
 
 RENDERING_DONE_MESSAGE_SUFFIX = "\nRendered by igmdb"
 
-DEMOCLEANER_EXE = os.path.join(dirname(__file__), 'DemoCleaner3.exe')DEMO_RENDERING_LOCAL_PUBLISHING_DELAY = timedelta(minutes=0.01)
+DEMOCLEANER_EXE = os.path.join(dirname(__file__), 'DemoCleaner3.exe')
+
+DEMO_RENDERING_LOCAL_PUBLISHING_DELAY = timedelta(minutes=0.01)
 
 DEMO_RENDERING_LOCAL_ODFE_DIR = 'c:\\path\\to\\odfe\\dir'  # path to oDFe
 
