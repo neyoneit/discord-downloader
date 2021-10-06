@@ -182,12 +182,14 @@ class DownloaderClient(discord.Client):
                             file=File(fp, filename),
                             reference=origial_message_ref
                         )
+                        if original_message is not None:
+                            await original_message.remove_reaction('\N{HOURGLASS}', self.user)
+
                     print('after send')
                 return
-            except Exception as e:
-                print(os.listdir('/tmp'))
-                print(f"Exception in error handler: {e}")
-                await self._after_error(identifier, e, channel_and_message_id, filename)
+            except Exception as e2:
+                print(f"Exception in error handler: {e2}")
+                await self._after_error(identifier, e2, channel_and_message_id, filename)
 
         print(f"Logging error for #{identifier} ({filename}; {channel_and_message_id}): {e}\n")
         self._error_log.write(f"Error for #{identifier} ({filename}): {e}\n")
