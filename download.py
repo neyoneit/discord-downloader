@@ -7,7 +7,6 @@ import threading
 import traceback
 import urllib
 import urllib.parse
-from os.path import basename
 from typing import TextIO, Optional, List, Dict, Tuple
 
 import discord
@@ -17,8 +16,9 @@ from discord.abc import Messageable
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
+from discord_downloader.additional_data import AdditionalData
 from discord_downloader.demo_analyzer import DemoAnalyzer
-from discord_downloader.demo_uploaders import DemoUploader, FakeUploader, IgmdbUploader, OdfeDemoRenderer, \
+from discord_downloader.demo_uploaders import FakeUploader, IgmdbUploader, OdfeDemoRenderer, \
     YoutubeUploader, VideoUploadException
 from discord_downloader.local_queue import LocallyQueuedUploader, AutonomousRenderingQueue, PollingRenderingQueue, \
     RenderingQueue
@@ -30,7 +30,7 @@ from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIREC
     IGMDB_POLLING_INTERVAL, DEMOCLEANER_EXE, DEMO_RENDERING_PROVIDER, DEMO_RENDERING_LOCAL_PUBLISHING_DELAY, \
     DEMO_RENDERING_LOCAL_ODFE_DIR, DEMO_RENDERING_LOCAL_ODFE_EXECUTABLE, DEMO_RENDERING_LOCAL_ODFE_CONFIG, \
     DEMO_RENDERING_LOCAL_ODFE_DEMO, DEMO_RENDERING_LOCAL_ODFE_VIDEO, DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX, \
-    DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS
+    DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS, DISCORD_MAX_VIDEO_SIZE
 
 
 def extract_urls(msg):
@@ -137,10 +137,11 @@ class DownloaderClient(discord.Client):
                     await self._after_error(None, e, None)
                     self._check_thread()
 
-    async def _after_upload(self, url: str, channel_and_message_id):
-        [in_channel, message_id] = self._reconstruct_channel_and_message_id(channel_and_message_id)
+    async def _after_upload(self, url: str, additional_data_raw):
+        additional_data = AdditionalData.reconstruct(additional_data_raw)
+        message_id = additional_data.message_id
         self._check_thread()
-        for channel in self._output_channels.get(in_channel, []):
+        for channel in self._output_channels.get(additional_data.in_channel, []):
             print(f"Fetching message {message_id} in channel {channel}")
             if message_id is not None:
                 try:
@@ -158,40 +159,68 @@ class DownloaderClient(discord.Client):
             self._check_thread()
         print(f"result url: {url}")
 
-    async def _after_error(self, identifier: Optional[int], e: Exception, channel_and_message_id, filename: Optional[str] = None):
+    async def _post_video_directly_to_discord(self, additional_data_raw, filename: str, e: VideoUploadException):
+        print(f"Video upload failed; uploading directly to Discord: {e}")
+        additional_data = AdditionalData.reconstruct(additional_data_raw)
+        print(f'round_id: {additional_data.rerendering_round}')
+        max_size = DISCORD_MAX_VIDEO_SIZE
+        video_size = os.path.getsize(e.video_file)
+        next_round = 0 if additional_data.rerendering_round is None else additional_data.rerendering_round + 1
+        if video_size > max_size:
+            print(f"Video size {video_size}B is larger than maximum ({max_size}), rendering again")
+            new_additional_data = AdditionalData(
+                in_channel=additional_data.in_channel,
+                message_id=additional_data.message_id,
+                title=additional_data.title,
+                description=additional_data.description,
+                rerendering_round=next_round,
+                url=additional_data.url,
+            )
+            await self._uploader.upload(
+                url=additional_data.url,
+                resolution=28,
+                title=additional_data.title,
+                description=additional_data.description,
+                additional_data=new_additional_data.serialize()
+            )
+
+        else:
+            in_channel = additional_data.in_channel
+            message_id = additional_data.message_id
+            self._check_thread()
+            for channel in self._output_channels.get(in_channel, []):
+                print(f'get message ref {channel} {message_id}')
+                channel: Messageable
+                try:
+                    original_message = await channel.fetch_message(message_id)
+                    origial_message_ref = original_message.to_reference() if message_id is not None else None
+                except discord.errors.NotFound as nfe:
+                    original_message = None
+                    origial_message_ref = None
+                print(f'before send {channel} {type(channel)} {e.video_file} {origial_message_ref}.')
+                print(f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}")
+                with open(e.video_file, 'rb') as fp:
+                    await channel.send(
+                        content=f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}",
+                        file=File(fp, filename),
+                        reference=origial_message_ref
+                    )
+                    if original_message is not None:
+                        await original_message.remove_reaction('\N{HOURGLASS}', self.user)
+
+                print('after send')
+            return
+
+    async def _after_error(self, identifier: Optional[int], e: Exception, additional_data_raw, filename: Optional[str] = None):
         self._check_thread()
         if isinstance(e, VideoUploadException):
-            print(f"Video upload failed; uploading directly to Discord: {e}")
             try:
-                print('reconstruct')
-                [in_channel, message_id] = self._reconstruct_channel_and_message_id(channel_and_message_id)
-                self._check_thread()
-                for channel in self._output_channels.get(in_channel, []):
-                    print(f'get message ref {channel} {message_id}')
-                    channel: Messageable
-                    try:
-                        origial_message_ref = (
-                            await channel.fetch_message(message_id)).to_reference() if message_id is not None else None
-                    except discord.errors.NotFound as nfe:
-                        origial_message_ref = None
-                    print(f'before send {channel} {type(channel)} {e.video_file} {origial_message_ref}.')
-                    print(f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}")
-                    with open(e.video_file, 'rb') as fp:
-                        await channel.send(
-                            content=f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}",
-                            file=File(fp, filename),
-                            reference=origial_message_ref
-                        )
-                        if original_message is not None:
-                            await original_message.remove_reaction('\N{HOURGLASS}', self.user)
-
-                    print('after send')
-                return
+                await self._post_video_directly_to_discord(additional_data_raw, filename, e)
             except Exception as e2:
                 print(f"Exception in error handler: {e2}")
-                await self._after_error(identifier, e2, channel_and_message_id, filename)
+                await self._after_error(identifier, e2, additional_data_raw, filename)
 
-        print(f"Logging error for #{identifier} ({filename}; {channel_and_message_id}): {e}\n")
+        print(f"Logging error for #{identifier} ({filename}; {additional_data_raw}): {e}\n")
         self._error_log.write(f"Error for #{identifier} ({filename}): {e}\n")
         traceback.print_exc(file=self._error_log)
         self._error_log.flush()
@@ -303,26 +332,39 @@ class DownloaderClient(discord.Client):
 
     async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str, message: Message):
         self._check_thread()
-        additional_data = [channel_name, message.id]
         try:
             demo_info = await self._demo_analyzer.analyze(local_filename)
             self._check_thread()
-
             nick = demo_info['player'].get('uncoloredName') or demo_info['player']['df_name']
             mapname = demo_info['client']['mapname']
             physics = self._extract_physics(demo_info['game']['gameplay'])
             time = demo_info['record']['bestTime']
-
-            await self._uploader.upload(
-                url=attachment.url,
-                resolution=28,
-                title=f"DeFRaG: {nick} {time} {physics} {mapname}",
-                description=f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}",
-                additional_data=additional_data
+            title = f"DeFRaG: {nick} {time} {physics} {mapname}"
+            description = f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}"
+            additional_data = AdditionalData(
+                in_channel=channel_name,
+                message_id=message.id,
+                title=title,
+                description=description,
+                rerendering_round=None,
+                url=attachment.url
             )
         except Exception as e:
             self._check_thread()
-            await self._after_error(attachment.id, e, additional_data, filename=attachment.filename)
+            await self._after_error(attachment.id, e, None, filename=attachment.filename)
+            return
+
+        try:
+            await self._uploader.upload(
+                url=attachment.url,
+                resolution=28,
+                title=title,
+                description=description,
+                additional_data=additional_data.serialize()
+            )
+        except Exception as e:
+            self._check_thread()
+            await self._after_error(attachment.id, e, additional_data.serialize(), filename=attachment.filename)
         self._check_thread()
 
     def _check_thread(self):
@@ -342,12 +384,6 @@ class DownloaderClient(discord.Client):
             return gameplay
         else:
             return match.group(1)
-
-    def _reconstruct_channel_and_message_id(self, channel_and_message_id):
-        if isinstance(channel_and_message_id, list):
-            return channel_and_message_id
-        else:
-            return [channel_and_message_id, None]
 
 
 def create_igmdb_uploader():

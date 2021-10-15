@@ -16,6 +16,8 @@ from typing import NamedTuple, Optional, List
 
 from aiohttp import ClientSession
 
+from settings import demo_rendering_local_odfe_discord_config_prefix
+
 
 class UploadResult(NamedTuple):
      success: bool
@@ -67,7 +69,7 @@ class RenderedDemoUploader(abc.ABC):
 
 class DemoRenderer(abc.ABC):
     @abstractmethod
-    async def render(self, demo_filename: str, demo_data: bytes) -> str:
+    async def render(self, demo_filename: str, demo_data: bytes, round_id: Optional[int]) -> str:
         pass
 
 
@@ -147,7 +149,7 @@ class OdfeDemoRenderer(DemoRenderer):
         self._video_dir = video_dir
         self._defrag_config = defrag_config
 
-    async def render(self, demo_filename: str, demo_data: bytes) -> str:
+    async def render(self, demo_filename: str, demo_data: bytes, round_id: Optional[int]) -> str:
         id = f"{datetime.datetime.now().timestamp()}-{uuid.uuid4().hex}"
         demo_ext = DEMO_EXT_REGEX.match(demo_filename).group(1)
         demo_tmp_basename = f"{id}.{demo_ext}"
@@ -156,7 +158,7 @@ class OdfeDemoRenderer(DemoRenderer):
         with open(demo_tmp_file, 'wb') as f:
             f.write(demo_data)
         cfg_file_content = "".join(map(lambda x: x+"\n", [
-            self._defrag_config,
+            self._defrag_config if round_id is None else demo_rendering_local_odfe_discord_config_prefix(round_id),
             f'demo "{demo_tmp_basename}"',
             f'video-pipe "{video_file_basename}"',
             'set nextdemo "wait 100; quit"',

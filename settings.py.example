@@ -46,6 +46,24 @@ DEMO_RENDERING_LOCAL_ODFE_VIDEO = 'c:\\odfe\\video-output'  # path to oDFe video
 
 DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX = ''  # config prefix for oDFe
 
+
+def demo_rendering_local_odfe_discord_config_prefix(round_id: int):
+    # config prefix for Discord when upload fails.
+    # At the first retry, round_id is 0, and it increases
+    return f'set cl_aviPipeFormat "' \
+           f'-preset slower ' \
+           f'-crf {23+5*round_id} ' \
+           f'-vcodec libx264 ' \
+           f'-flags +cgop ' \
+           f'-pix_fmt yuv420p ' \
+           f'-bf 2 ' \
+           f'-codec:a aac ' \
+           f'-strict -2 ' \
+           f'-b:a 160k ' \
+           f'-r:a 22050 ' \
+           f'-movflags faststart ' \
+           f'"'
+
 DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE = 'c:\\youtube-upload\\bin\\youtube-upload.bat'
 
 DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS = [
@@ -54,3 +72,5 @@ DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS = [
     '--chunksize=262144',  # minimum chunk size for YT is 262144
     '--rate-limit=352144', # max upload rate
 ]
+
+DISCORD_MAX_VIDEO_SIZE = 100*1024*1024

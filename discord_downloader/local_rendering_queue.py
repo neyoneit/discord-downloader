@@ -7,9 +7,10 @@ from typing import List, Callable, Any, Awaitable
 
 from aiohttp import ClientSession
 
-from discord_downloader.demo_uploaders import DemoRenderer, RenderedDemoUploader
+from discord_downloader.demo_uploaders import DemoRenderer, RenderedDemoUploader, VideoUploadException
 from discord_downloader.local_queue import AutonomousRenderingQueue
 from discord_downloader.persistent_state import StoredState
+from discord_downloader.additional_data import AdditionalData
 
 
 async def wait_until(instant: datetime.datetime):
@@ -71,11 +72,16 @@ class LocalRenderingQueue(AutonomousRenderingQueue):
                 await self._rendering_queue_event.wait()  # prevents busy loop
                 self._rendering_queue_event.clear()
             [url, title, description, additional_data] = self._rendering_queue[0]
+            round_id = AdditionalData.reconstruct(additional_data).rerendering_round
             async with ClientSession() as session:
                 try:
                     resp = await session.get(url)
-                    video_file = await self._demo_renderer.render(url, await resp.read())
-                    self._upload_queue.append([url, video_file, title, description, additional_data])
+                    video_file = await self._demo_renderer.render(url, await resp.read(), round_id)
+                    if round_id is None:
+                        self._upload_queue.append([url, video_file, title, description, additional_data])
+                    else:
+                        exc = VideoUploadException('this video was requested to skip the usual upload', video_file)
+                        await self._report_error(url, exc, additional_data)
                 except Exception as e:
                     await self._report_error(url, e, additional_data)
                 self._rendering_queue.pop(0)
