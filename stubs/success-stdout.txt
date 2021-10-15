@@ -1,0 +1,7 @@
+Using client secrets: /home/user/v/credentials.json
+Using credentials file: /home/user/v/user-credentials.json
+Start upload: /home/user/v/out-1000-0.webm
+Rate limiter: <youtube_upload.rate_limit.NoRateLimiter object at 0x78dafd2c64a8>
+Resource
+Video URL: https://www.youtube.com/watch?v=RAZfS6r-LLM
+RAZfS6r-LLM

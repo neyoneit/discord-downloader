@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# safety settings
+set -u
+set -e
+set -o pipefail
+
+#exit 1
+dn=$(dirname "$(realpath "$0")")
+touch /tmp/here
+cp "$(dirname "$(realpath "$0")")"/toonkaa-7-resolution-4-3-720p.mp4 /tmp/$(basename $2 .cfg | sed 's/^file-//').mp4
