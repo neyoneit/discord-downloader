@@ -12,7 +12,7 @@ from typing import TextIO, Optional, List, Dict, Tuple
 import discord
 import filelock
 from discord import Message, Attachment, File
-from discord.abc import Messageable
+from discord.abc import Messageable, User
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
@@ -87,7 +87,6 @@ class DownloaderClient(discord.Client):
                     self._uploader: AutonomousRenderingQueue
                     await self._uploader.run()
 
-
             finally:
                 await self.logout()
                 self._check_thread()
@@ -112,13 +111,11 @@ class DownloaderClient(discord.Client):
         else:
             channel_name = self._reverse_channels.get(message.channel)
             print(f"new message in channel: {channel_name} ({message.channel})")
-            if channel_name in CHANNELS:
-                print("Checking single channel…")
-                await self._download_channel(channel_name, message.channel)
-                self._check_thread()
-                print("done")
-            else:
-                print("I am not interested in this channel!")
+            check_all_messages =  channel_name in CHANNELS
+            print("Checking single channel…")
+            await self._download_channel(channel_name, message.channel, check_all_messages)
+            self._check_thread()
+            print("done")
 
     async def _check_uploads(self):
         if self._uploader is not None and self._uploader.needs_polling():
@@ -253,16 +250,15 @@ class DownloaderClient(discord.Client):
         else:
             return channel
 
-
     async def _download_news(self):
         async with self._lock:
             print("Checking individual channels")
             channel: Messageable
             for name, channel in self._channels.items():
-                if name in CHANNELS:
-                    print(f"## {name}")
-                    await self._download_channel_without_lock(name, channel)
-                    self._check_thread()
+                check_all_mesages = name in CHANNELS
+                print(f"## {name} (check all: {check_all_mesages})")
+                await self._download_channel_without_lock(name, channel, check_all_mesages)
+                self._check_thread()
             print("Everything done")
 
     async def _get_channels(self):
@@ -275,13 +271,13 @@ class DownloaderClient(discord.Client):
                 channels[name] = channel
         return channels
 
-    async def _download_channel(self, name: str, channel: Messageable):
+    async def _download_channel(self, name: str, channel: Messageable, check_all_messages: bool):
         async with self._lock:
             self._check_thread()
-            await self._download_channel_without_lock(name, channel)
+            await self._download_channel_without_lock(name, channel, check_all_messages)
             self._check_thread()
 
-    async def _download_channel_without_lock(self, name: str, channel: Messageable):
+    async def _download_channel_without_lock(self, name: str, channel: Messageable, check_all_messages: bool):
         self._check_thread()
         savepoint = Savepoint(os.path.join(STATE_DIRECTORY, urllib.parse.quote(name) + ".txt"))
         mover = DeduplicatingRenamingMover()
@@ -300,8 +296,7 @@ class DownloaderClient(discord.Client):
             def after_sync():
                 print("Done")
 
-            message: Message
-            async for message in history:
+            async def archive_message(message: Message):
                 print(f"#{message.id} {message.created_at}: {message.content}")
                 urls = extract_urls(message.content)
                 if len(urls) > 0:
@@ -328,6 +323,12 @@ class DownloaderClient(discord.Client):
 
                     print(f"* {attachment} (new: {new_attachment_filename})")
                 savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
+
+            async for m in history:
+                if check_all_messages or self.user in m.mentions:
+                    await archive_message(m)
+                else:
+                    print(f"Not interested in message {m}")
         savepoint.close()
 
     async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str, message: Message):
