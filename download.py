@@ -282,10 +282,11 @@ class DownloaderClient(discord.Client):
         savepoint = Savepoint(os.path.join(STATE_DIRECTORY, urllib.parse.quote(name) + ".txt"))
         mover = DeduplicatingRenamingMover()
         last_processed_message_id = savepoint.get()  # messages have increasing ids; we can use it to mark what messages we have seen
+        print(f"channel: {type(channel)} {channel}")
         history: HistoryIterator = channel.history(
             limit=None,
             oldest_first=True,
-            after=None if last_processed_message_id is None else discord.Object(last_processed_message_id)
+            after=discord.Object(891111111283456789) if last_processed_message_id is None else discord.Object(last_processed_message_id)
         )
         with open(URLS_FILE, "a") as urls_file:
             def before_sync():
@@ -322,13 +323,14 @@ class DownloaderClient(discord.Client):
                         self._check_thread()
 
                     print(f"* {attachment} (new: {new_attachment_filename})")
-                savepoint.set(message.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
 
-            async for m in history:
-                if check_all_messages or self.user in m.mentions:
-                    await archive_message(m)
-                else:
-                    print(f"Not interested in message {m}")
+            try:
+                async for m in history:
+                    if check_all_messages or self.user in m.mentions:
+                        await archive_message(m)
+                    savepoint.set(m.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
+            except discord.errors.Forbidden:
+                print(f"No access to channel {channel}")
         savepoint.close()
 
     async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str, message: Message):
