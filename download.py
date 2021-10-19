@@ -88,7 +88,7 @@ class DownloaderClient(discord.Client):
                     await self._uploader.run()
 
             finally:
-                await self.logout()
+                await self.close()
                 self._check_thread()
         except Exception as e:
             self.ret = 1
@@ -338,10 +338,10 @@ class DownloaderClient(discord.Client):
         try:
             demo_info = await self._demo_analyzer.analyze(local_filename)
             self._check_thread()
-            nick = demo_info['player'].get('uncoloredName') or demo_info['player']['df_name']
-            mapname = demo_info['client']['mapname']
-            physics = self._extract_physics(demo_info['game']['gameplay'])
-            time = demo_info['record']['bestTime']
+            nick = demo_info['player'].get('uncoloredName') or demo_info['player'].get('df_name') or '<unknown>'
+            mapname = demo_info['client'].get('mapname') or '<unknown>'
+            physics = self._extract_physics(demo_info['game'].get('gameplay')) or '<unknown>'
+            time = demo_info['record'].get('bestTime') or '<unknown>'
             title = f"DeFRaG: {nick} {time} {physics} {mapname}"
             description = f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}"
             additional_data = AdditionalData(
@@ -382,6 +382,8 @@ class DownloaderClient(discord.Client):
                 raise Exception(f"Bad event loop: {self._loop} != {asyncio.get_running_loop()}")
 
     def _extract_physics(self, gameplay):
+        if gameplay is None:
+            return None
         match = re.compile('.*\\((.*)\\)$').match(gameplay)
         if match is None:
             return gameplay
