@@ -138,7 +138,9 @@ class DownloaderClient(discord.Client):
         additional_data = AdditionalData.reconstruct(additional_data_raw)
         message_id = additional_data.message_id
         self._check_thread()
-        for channel in self._output_channels.get(additional_data.in_channel, []):
+        output_channels = self._get_output_channels(additional_data.in_channel)
+        print(f"output_channels: {output_channels}")
+        for channel in output_channels:
             print(f"Fetching message {message_id} in channel {channel}")
             if message_id is not None:
                 try:
@@ -185,7 +187,9 @@ class DownloaderClient(discord.Client):
             in_channel = additional_data.in_channel
             message_id = additional_data.message_id
             self._check_thread()
-            for channel in self._output_channels.get(in_channel, []):
+            out_channels = await self._get_output_channels(in_channel)
+            print(f"out_channels: {out_channels}")
+            for channel in out_channels:
                 print(f'get message ref {channel} {message_id}')
                 channel: Messageable
                 try:
@@ -206,7 +210,11 @@ class DownloaderClient(discord.Client):
                         await original_message.remove_reaction('\N{HOURGLASS}', self.user)
 
                 print('after send')
+            print("Discord upload done")
             return
+
+    async def _get_output_channels(self, in_channel):
+        return self._output_channels.get(in_channel, None) or [self._channels.get(in_channel)]
 
     async def _after_error(self, identifier: Optional[int], e: Exception, additional_data_raw, filename: Optional[str] = None):
         self._check_thread()
