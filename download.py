@@ -135,7 +135,7 @@ class DownloaderClient(discord.Client):
         additional_data = AdditionalData.reconstruct(additional_data_raw)
         message_id = additional_data.message_id
         self._check_thread()
-        output_channels = self._get_output_channels(additional_data.in_channel)
+        output_channels = await self._get_output_channels(additional_data.in_channel)
         self._logger.info(f"_after_upload: output_channels: {output_channels}")
         for channel in output_channels:
             self._logger.info(f"_after_upload: Fetching message {message_id} in channel {channel}")
