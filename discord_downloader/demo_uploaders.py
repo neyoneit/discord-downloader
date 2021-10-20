@@ -2,12 +2,11 @@ import abc
 import asyncio
 import datetime
 import json
+import logging
 import os.path
 import random
 import re
-import shutil
 import subprocess
-import tempfile
 import uuid
 from abc import abstractmethod
 from os import path
@@ -74,6 +73,7 @@ class DemoRenderer(abc.ABC):
 
 
 class YoutubeUploader(RenderedDemoUploader):
+    LOGGER = logging.getLogger('YoutubeUploader')
 
     def __init__(self, youtube_uploader_executable: str, youtube_uploader_params: List[str]):
         self._youtube_uploader_executable = youtube_uploader_executable
@@ -93,7 +93,7 @@ class YoutubeUploader(RenderedDemoUploader):
                 "--",
                 file
             ]
-            print(f'YouTube upload call: {call}')
+            self.LOGGER.info(f'YouTube upload call: {call}')
             proc: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
                 *call,
                 stdout=subprocess.PIPE,
@@ -199,6 +199,7 @@ class OdfeDemoRenderer(DemoRenderer):
 
 
 class IgmdbUploader(DemoUploader):
+    LOGGER = logging.getLogger('IgmdbUploader')
 
     def __init__(self, token):
         self._token = token
@@ -217,11 +218,11 @@ class IgmdbUploader(DemoUploader):
             }
             async with session.post('https://www.igmdb.org/processor.php?action=submitDemo', data = data) as response:
                 resp_s = await response.read()
-                print(f"resp_s: {resp_s}")
+                self.LOGGER.info(f"resp_s: {resp_s}")
                 resp = json.loads(resp_s.replace(b"\\'", b"'"))
                 success = resp['success']
                 render_id = resp['render_id']
-                print(str(resp))
+                self.LOGGER.info(str(resp))
                 if success and not render_id:
                     raise ProbablyAlreadyUploadedException(url)
                 if not success:
@@ -255,9 +256,10 @@ class IgmdbUploader(DemoUploader):
 
 
 class FakeUploader(DemoUploader):
+    LOGGER = logging.getLogger('FakeUploader')
 
     async def upload(self, url: str, resolution: int, title: str, description: str) -> UploadResult:
-        print(f"Simulating upload of {url}: title: {title}, resolution: {resolution}, description: {description}")
+        self.LOGGER.info(f"Simulating upload of {url}: title: {title}, resolution: {resolution}, description: {description}")
         r = random.randrange(100)
         if r < 33: raise QueueFullException()
         if r < 43: raise ProbablyAlreadyUploadedException(url)
@@ -265,7 +267,7 @@ class FakeUploader(DemoUploader):
         return UploadResult(True, random.randrange(65536))
 
     async def check_status(self, id: int) -> Optional[str]:
-        print(f"Simulating check_status for {id}")
+        self.LOGGER.info(f"Simulating check_status for {id}")
         r = random.randrange(100)
         if r < 20: return f"https://example.com/#{random.randrange(65536)}"
         if r < 90: return None

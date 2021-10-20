@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import logging
 import traceback
 from asyncio import Event, FIRST_EXCEPTION
 from datetime import timedelta
@@ -21,6 +22,7 @@ async def wait_until(instant: datetime.datetime):
 
 
 class LocalRenderingQueue(AutonomousRenderingQueue):
+    LOGGER = logging.getLogger('LocalRenderingQueue')
 
     def __init__(self, demo_renderer: DemoRenderer, rendered_demo_uploader: RenderedDemoUploader, state: StoredState,
                  delay_before_publishing: timedelta):
@@ -125,8 +127,7 @@ class LocalRenderingQueue(AutonomousRenderingQueue):
             try:
                 await fail_callback(id, e, additional_data)
             except BaseException as e:
-                print(f"LocalRenderingQueue: Exception in fail callback {fail_callback}: {e}")
-                traceback.print_exc()
+                self.LOGGER.exception(f"LocalRenderingQueue: Exception in fail callback {fail_callback}")
                 raise
 
     @classmethod

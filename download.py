@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 import asyncio
+import logging
 import os
 import re
 import sys
 import threading
-import traceback
 import urllib
 import urllib.parse
-from typing import TextIO, Optional, List, Dict, Tuple
+from logging import FileHandler
+from typing import Optional, List, Dict, Tuple
 
 import discord
 import filelock
 from discord import Message, Attachment, File
-from discord.abc import Messageable, User
+from discord.abc import Messageable
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
 
@@ -42,17 +43,16 @@ class DownloaderClient(discord.Client):
     _output_channels: Dict[Optional[str], List[Messageable]]
     _dirty = False
 
-    def __init__(self, uploader: RenderingQueue, demo_analyzer: DemoAnalyzer,
-                 error_log: TextIO, loop):
+    def __init__(self, uploader: RenderingQueue, demo_analyzer: DemoAnalyzer, loop):
         super(DownloaderClient, self).__init__(loop=loop)
         self._uploader = uploader
         self.ret = 0
         self._loop = loop
         self._lock = asyncio.Lock(loop=loop)
         self._check_thread()
-        self._error_log = error_log
         self._prepared = False
         self._demo_analyzer = demo_analyzer
+        self._logger = logging.getLogger('DownloaderClient')
         if not self._uploader.needs_polling():
             self._uploader: AutonomousRenderingQueue
             self._uploader.add_done_callback(self._after_upload)
@@ -68,10 +68,10 @@ class DownloaderClient(discord.Client):
                 self._check_thread()
                 await self._download_news()
                 self._check_thread()
-                print("Initial check done")
+                self._logger.info("Initial check done")
                 self._prepared = True
                 if self._dirty:
-                    print("I am dirty!")
+                    self._logger.info("I am dirty!")
                     await self._download_news()
                     self._check_thread()
                     self._dirty = False
@@ -92,13 +92,10 @@ class DownloaderClient(discord.Client):
                 self._check_thread()
         except Exception as e:
             self.ret = 1
-            traceback.print_exc(file=sys.stderr)
+            self._logger.exception("Exception in on_ready")
 
     async def on_error(self, event_method, *args, **kwargs):
-        print("Unhandled error:")
-        traceback.print_exc()
-        self._error_log.write("Unhandled error:")
-        traceback.print_exc(file=self._error_log)
+        self._logger.exception("Unhandled fatal error:")
         self._loop.stop()
         sys.exit(2)
 
@@ -110,12 +107,12 @@ class DownloaderClient(discord.Client):
             self._dirty = True
         else:
             channel_name = self._reverse_channels.get(message.channel)
-            print(f"new message in channel: {channel_name} ({message.channel})")
-            check_all_messages =  channel_name in CHANNELS
-            print("Checking single channel…")
+            self._logger.info(f"new message in channel: {channel_name} ({message.channel})")
+            check_all_messages = channel_name in CHANNELS
+            self._logger.info("Checking single channel…")
             await self._download_channel(channel_name, message.channel, check_all_messages)
             self._check_thread()
-            print("done")
+            self._logger.info("on_message: done")
 
     async def _check_uploads(self):
         if self._uploader is not None and self._uploader.needs_polling():
@@ -139,15 +136,15 @@ class DownloaderClient(discord.Client):
         message_id = additional_data.message_id
         self._check_thread()
         output_channels = self._get_output_channels(additional_data.in_channel)
-        print(f"output_channels: {output_channels}")
+        self._logger.info(f"_after_upload: output_channels: {output_channels}")
         for channel in output_channels:
-            print(f"Fetching message {message_id} in channel {channel}")
+            self._logger.info(f"_after_upload: Fetching message {message_id} in channel {channel}")
             if message_id is not None:
                 try:
                     origial_message_ref = (await channel.fetch_message(message_id)).to_reference()
-                    print(f"Fetched: {origial_message_ref}")
+                    self._logger.info(f"_after_upload: Fetched: {origial_message_ref}")
                 except discord.errors.NotFound as e:
-                    print(f"Cannot find message {message_id}: {e}")
+                    self._logger.info(f"_after_upload: Cannot find message {message_id}: {e}")
                     origial_message_ref = None  # fallback
             else:
                 origial_message_ref = None
@@ -156,17 +153,17 @@ class DownloaderClient(discord.Client):
                 reference=origial_message_ref
             )
             self._check_thread()
-        print(f"result url: {url}")
+        self._logger.info(f"_after_upload: result url: {url}")
 
     async def _post_video_directly_to_discord(self, additional_data_raw, filename: str, e: VideoUploadException):
-        print(f"Video upload failed; uploading directly to Discord: {e}")
+        self._logger.warning(f"_post_video_directly_to_discord: Video upload failed; uploading directly to Discord: {e}")
         additional_data = AdditionalData.reconstruct(additional_data_raw)
-        print(f'round_id: {additional_data.rerendering_round}')
+        self._logger.info(f"_post_video_directly_to_discord: round_id: {additional_data.rerendering_round}")
         max_size = DISCORD_MAX_VIDEO_SIZE
         video_size = os.path.getsize(e.video_file)
         next_round = 0 if additional_data.rerendering_round is None else additional_data.rerendering_round + 1
         if video_size > max_size:
-            print(f"Video size {video_size}B is larger than maximum ({max_size}), rendering again")
+            self._logger.warning(f"_post_video_directly_to_discord: Video size {video_size}B is larger than maximum ({max_size}), rendering again")
             new_additional_data = AdditionalData(
                 in_channel=additional_data.in_channel,
                 message_id=additional_data.message_id,
@@ -188,9 +185,9 @@ class DownloaderClient(discord.Client):
             message_id = additional_data.message_id
             self._check_thread()
             out_channels = await self._get_output_channels(in_channel)
-            print(f"out_channels: {out_channels}")
+            self._logger.info(f"_post_video_directly_to_discord: out_channels: {out_channels}")
             for channel in out_channels:
-                print(f'get message ref {channel} {message_id}')
+                self._logger.info(f"_post_video_directly_to_discord: get message ref {channel} {message_id}")
                 channel: Messageable
                 try:
                     original_message = await channel.fetch_message(message_id)
@@ -198,19 +195,21 @@ class DownloaderClient(discord.Client):
                 except discord.errors.NotFound as nfe:
                     original_message = None
                     origial_message_ref = None
-                print(f'before send {channel} {type(channel)} {e.video_file} {origial_message_ref}.')
-                print(f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}")
+                message_content = f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}"
+                self._logger.info(f"_post_video_directly_to_discord: before send {channel} {type(channel)} "
+                                  f"{e.video_file} {origial_message_ref}.")
+                self._logger.info(f"_post_video_directly_to_discord: sending message: {message_content}")
                 with open(e.video_file, 'rb') as fp:
                     await channel.send(
-                        content=f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}",
+                        content=message_content,
                         file=File(fp, filename),
                         reference=origial_message_ref
                     )
                     if original_message is not None:
                         await original_message.remove_reaction('\N{HOURGLASS}', self.user)
 
-                print('after send')
-            print("Discord upload done")
+                self._logger.info(f"_post_video_directly_to_discord: after send")
+            self._logger.info(f"_post_video_directly_to_discord: Discord upload done")
             return
 
     async def _get_output_channels(self, in_channel):
@@ -222,16 +221,13 @@ class DownloaderClient(discord.Client):
             try:
                 await self._post_video_directly_to_discord(additional_data_raw, filename, e)
             except Exception as e2:
-                print(f"Exception in error handler: {e2}")
+                self._logger.exception(f"_after_error: Exception in error handler")
                 await self._after_error(identifier, e2, additional_data_raw, filename)
 
-        print(f"Logging error for #{identifier} ({filename}; {additional_data_raw}): {e}\n")
-        self._error_log.write(f"Error for #{identifier} ({filename}): {e}\n")
-        traceback.print_exc(file=self._error_log)
-        self._error_log.flush()
+        self._logger.exception(f"_after_error:Logging error for #{identifier} ({filename}; {additional_data_raw}):\n")
 
     async def _init_channels(self):
-        print("Connected")
+        self._logger.info(f"_init_channels: Connected")
 
         self._check_thread()
         self._channels = await self._get_channels()
@@ -260,14 +256,14 @@ class DownloaderClient(discord.Client):
 
     async def _download_news(self):
         async with self._lock:
-            print("Checking individual channels")
+            self._logger.info("Checking individual channels")
             channel: Messageable
             for name, channel in self._channels.items():
                 check_all_mesages = name in CHANNELS
-                print(f"## {name} (check all: {check_all_mesages})")
+                self._logger.info(f"## {name} (check all: {check_all_mesages})")
                 await self._download_channel_without_lock(name, channel, check_all_mesages)
                 self._check_thread()
-            print("Everything done")
+            self._logger.info("_download_news: Everything done")
 
     async def _get_channels(self):
         channels = {}
@@ -290,7 +286,7 @@ class DownloaderClient(discord.Client):
         savepoint = Savepoint(os.path.join(STATE_DIRECTORY, urllib.parse.quote(name) + ".txt"))
         mover = DeduplicatingRenamingMover()
         last_processed_message_id = savepoint.get()  # messages have increasing ids; we can use it to mark what messages we have seen
-        print(f"channel: {type(channel)} {channel}")
+        self._logger.info(f"channel: {type(channel)} {channel}")
         history: HistoryIterator = channel.history(
             limit=None,
             oldest_first=True,
@@ -298,15 +294,15 @@ class DownloaderClient(discord.Client):
         )
         with open(URLS_FILE, "a") as urls_file:
             def before_sync():
-                print("Syncing… ", end="")
+                self._logger.info("Syncing… ")
                 urls_file.flush()
                 os.fsync(urls_file.fileno())
 
             def after_sync():
-                print("Done")
+                self._logger.info("Sync done")
 
             async def archive_message(message: Message):
-                print(f"#{message.id} {message.created_at}: {message.content}")
+                self._logger.info(f"#{message.id} {message.created_at}: {message.content}")
                 urls = extract_urls(message.content)
                 if len(urls) > 0:
                     for url in urls:
@@ -330,7 +326,7 @@ class DownloaderClient(discord.Client):
                         await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
                         self._check_thread()
 
-                    print(f"* {attachment} (new: {new_attachment_filename})")
+                    self._logger.info(f"* {attachment} (new: {new_attachment_filename})")
 
             try:
                 async for m in history:
@@ -338,7 +334,7 @@ class DownloaderClient(discord.Client):
                         await archive_message(m)
                     savepoint.set(m.id, before_sync=before_sync, after_sync=after_sync)  # mark as done
             except discord.errors.Forbidden:
-                print(f"No access to channel {channel}")
+                self._logger.warning(f"No access to channel {channel}")
         savepoint.close()
 
     async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str, message: Message):
@@ -442,20 +438,25 @@ def main():
     asyncio.set_event_loop(loop)
     try:
         with filelock.FileLock(os.path.join(STATE_DIRECTORY, "run.lock")).acquire(timeout=10):
-            with open(os.path.join(STATE_DIRECTORY, "errors.log"), "a") as error_log:
-                print("Connecting…")
-                state, uploader = create_uploader()
-                client = DownloaderClient(
-                    uploader=uploader,
-                    demo_analyzer=DemoAnalyzer(DEMOCLEANER_EXE),
-                    error_log=error_log,
-                    loop=loop,
-                )
-                client.run(DISCORD_TOKEN)
-                state.close()
-                sys.exit(client.ret)
+            file_handler = FileHandler(filename=os.path.join(STATE_DIRECTORY, "errors.log"))
+            file_handler.setLevel(logging.WARNING)
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s [%(levelname)s] %(message)s",
+                handlers=[file_handler, logging.StreamHandler()]
+            )
+            logging.getLogger().info("Connecting…")
+            state, uploader = create_uploader()
+            client = DownloaderClient(
+                uploader=uploader,
+                demo_analyzer=DemoAnalyzer(DEMOCLEANER_EXE),
+                loop=loop,
+            )
+            client.run(DISCORD_TOKEN)
+            state.close()
+            sys.exit(client.ret)
     except filelock.Timeout:
-        print("Unable to acquire lock. It looks like this process is already running…")
+        logging.getLogger().error("Unable to acquire lock. It looks like this process is already running…")
 
 
 if __name__ == "__main__":

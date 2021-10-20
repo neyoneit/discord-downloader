@@ -73,7 +73,6 @@ class DemoAnalyzer:
             rest = chunk[entity_end+1:]
             return char+rest
 
-
         return first + ("".join(map(process_hexa, others)))
 
     def _postprocess_dict(self, indict):
