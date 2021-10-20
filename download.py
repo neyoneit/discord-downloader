@@ -346,7 +346,7 @@ class DownloaderClient(discord.Client):
             mapname = demo_info['client'].get('mapname') or '<unknown>'
             physics = self._extract_physics(demo_info['game'].get('gameplay')) or '<unknown>'
             time = demo_info['record'].get('bestTime') or '<unknown>'
-            title = f"DeFRaG: {nick} {time} {physics} {mapname}"
+            title = f"DeFRaG: {nick} {time} {physics} {mapname}".replace('<', '_').replace('>', '_')
             description = f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}"
             additional_data = AdditionalData(
                 in_channel=channel_name,
