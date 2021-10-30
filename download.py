@@ -33,7 +33,8 @@ from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIREC
     DEMO_RENDERING_LOCAL_ODFE_DIR, DEMO_RENDERING_LOCAL_ODFE_EXECUTABLE, DEMO_RENDERING_LOCAL_ODFE_CONFIG, \
     DEMO_RENDERING_LOCAL_ODFE_DEMO, DEMO_RENDERING_LOCAL_ODFE_VIDEO, DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX, \
     DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS, DISCORD_MAX_VIDEO_SIZE, \
-    REACTIONS_WIP, REACTIONS_REJECTED, REACTIONS_DONE, REACTIONS_FAILED
+    REACTIONS_WIP, REACTIONS_REJECTED, REACTIONS_DONE, REACTIONS_FAILED, \
+    DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX
 
 
 def extract_urls(msg):
@@ -367,7 +368,8 @@ class DownloaderClient(discord.Client):
             physics = self._extract_physics(demo_info['game'].get('gameplay')) or '<unknown>'
             time = demo_info['record'].get('bestTime') or '<unknown>'
             title = f"DeFRaG: {nick} {time} {physics} {mapname}".replace('<', '_').replace('>', '_')
-            description = f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}"
+            description = f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}\n" \
+                          f"{DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX}"
             additional_data = AdditionalData(
                 in_channel=channel_name,
                 message_id=message.id,
