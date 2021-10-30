@@ -34,7 +34,7 @@ from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIREC
     DEMO_RENDERING_LOCAL_ODFE_DEMO, DEMO_RENDERING_LOCAL_ODFE_VIDEO, DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX, \
     DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS, DISCORD_MAX_VIDEO_SIZE, \
     REACTIONS_WIP, REACTIONS_REJECTED, REACTIONS_DONE, REACTIONS_FAILED, \
-    DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX
+    DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX, DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID
 
 
 def extract_urls(msg):
@@ -161,6 +161,9 @@ class DownloaderClient(discord.Client):
             if original_message is not None:
                 await self._replace_reactions(original_message, REACTIONS_DONE)
             self._check_thread()
+        if additional_data.has_unknown:
+            notification_user = await self.fetch_user(DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID)
+            await notification_user.send(f'Video with some unknown: {url}')
         self._logger.info(f"_after_upload: result url: {url}")
 
     async def _post_video_directly_to_discord(self, additional_data_raw, filename: str, e: VideoUploadException):
@@ -360,13 +363,23 @@ class DownloaderClient(discord.Client):
 
     async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str, message: Message):
         self._check_thread()
+        has_unknown = False
         try:
             demo_info = await self._demo_analyzer.analyze(local_filename)
             self._check_thread()
-            nick = demo_info['player'].get('uncoloredName') or demo_info['player'].get('df_name') or '<unknown>'
-            mapname = demo_info['client'].get('mapname') or '<unknown>'
-            physics = self._extract_physics(demo_info['game'].get('gameplay')) or '<unknown>'
-            time = demo_info['record'].get('bestTime') or '<unknown>'
+
+            def unknown_if_none(inp: Optional[str]):
+                if inp is None:
+                    nonlocal has_unknown
+                    has_unknown = True
+                    return '<unknown>'
+                else:
+                    return inp
+
+            nick = unknown_if_none(demo_info['player'].get('uncoloredName') or demo_info['player'].get('df_name'))
+            mapname = unknown_if_none(demo_info['client'].get('mapname'))
+            physics = unknown_if_none(self._extract_physics(demo_info['game'].get('gameplay')))
+            time = unknown_if_none(demo_info['record'].get('bestTime'))
             title = f"DeFRaG: {nick} {time} {physics} {mapname}".replace('<', '_').replace('>', '_')
             description = f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}\n" \
                           f"{DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX}"
@@ -376,7 +389,8 @@ class DownloaderClient(discord.Client):
                 title=title,
                 description=description,
                 rerendering_round=None,
-                url=attachment.url
+                url=attachment.url,
+                has_unknown=has_unknown
             )
         except Exception as e:
             self._check_thread()

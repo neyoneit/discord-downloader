@@ -8,6 +8,7 @@ class AdditionalData(NamedTuple):
     description: Optional[str]
     rerendering_round: Optional[int]
     url: Optional[str]
+    has_unknown: bool
 
     @staticmethod
     def reconstruct(additional_data_raw):
@@ -18,13 +19,19 @@ class AdditionalData(NamedTuple):
                 description = None
                 rerendering_round = None
                 url = None
+                has_unknown = False
             else:
-                [title, description, rerendering_round, url] = rest
+                [title, description, rerendering_round, url, *rest2] = rest
+                if len(rest2) == 0:
+                    has_unknown = False
+                else:
+                    [has_unknown, *rest3] = rest2
             return AdditionalData(in_channel=in_channel, message_id=message_id, title=title, description=description,
-                                  rerendering_round=rerendering_round, url=url)
+                                  rerendering_round=rerendering_round, url=url, has_unknown=has_unknown)
         else:
             return AdditionalData(in_channel=additional_data_raw, message_id=None, title=None, description=None,
-                                  rerendering_round=None, url=None)
+                                  rerendering_round=None, url=None, has_unknown=False)
 
     def serialize(self):
-        return [self.in_channel, self.message_id, self.title, self.description, self.rerendering_round, self.url]
+        return [self.in_channel, self.message_id, self.title, self.description, self.rerendering_round, self.url,
+                self.has_unknown]
