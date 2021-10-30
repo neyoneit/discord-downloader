@@ -7,8 +7,9 @@ import sys
 import threading
 import urllib
 import urllib.parse
+from asyncio import ALL_COMPLETED
 from logging import FileHandler
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union
 
 import discord
 import filelock
@@ -31,7 +32,8 @@ from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIREC
     IGMDB_POLLING_INTERVAL, DEMOCLEANER_EXE, DEMO_RENDERING_PROVIDER, DEMO_RENDERING_LOCAL_PUBLISHING_DELAY, \
     DEMO_RENDERING_LOCAL_ODFE_DIR, DEMO_RENDERING_LOCAL_ODFE_EXECUTABLE, DEMO_RENDERING_LOCAL_ODFE_CONFIG, \
     DEMO_RENDERING_LOCAL_ODFE_DEMO, DEMO_RENDERING_LOCAL_ODFE_VIDEO, DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX, \
-    DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS, DISCORD_MAX_VIDEO_SIZE
+    DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS, DISCORD_MAX_VIDEO_SIZE, \
+    REACTIONS_WIP, REACTIONS_REJECTED, REACTIONS_DONE, REACTIONS_FAILED
 
 
 def extract_urls(msg):
@@ -141,17 +143,22 @@ class DownloaderClient(discord.Client):
             self._logger.info(f"_after_upload: Fetching message {message_id} in channel {channel}")
             if message_id is not None:
                 try:
-                    origial_message_ref = (await channel.fetch_message(message_id)).to_reference()
-                    self._logger.info(f"_after_upload: Fetched: {origial_message_ref}")
+                    original_message = await channel.fetch_message(message_id)
+                    original_message_ref = (original_message).to_reference()
+                    self._logger.info(f"_after_upload: Fetched: {original_message_ref}")
                 except discord.errors.NotFound as e:
                     self._logger.info(f"_after_upload: Cannot find message {message_id}: {e}")
-                    origial_message_ref = None  # fallback
+                    original_message = None  # fallback
+                    original_message_ref = None  # fallback
             else:
-                origial_message_ref = None
+                original_message = None
+                original_message_ref = None
             await channel.send(
                 content=f"{RENDERING_DONE_MESSAGE_PREFIX}{url}{RENDERING_DONE_MESSAGE_SUFFIX}",
-                reference=origial_message_ref
+                reference=original_message_ref
             )
+            if original_message is not None:
+                await self._replace_reactions(original_message, REACTIONS_DONE)
             self._check_thread()
         self._logger.info(f"_after_upload: result url: {url}")
 
@@ -191,22 +198,22 @@ class DownloaderClient(discord.Client):
                 channel: Messageable
                 try:
                     original_message = await channel.fetch_message(message_id)
-                    origial_message_ref = original_message.to_reference() if message_id is not None else None
+                    original_message_ref = original_message.to_reference() if message_id is not None else None
                 except discord.errors.NotFound as nfe:
                     original_message = None
-                    origial_message_ref = None
+                    original_message_ref = None
                 message_content = f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}"
                 self._logger.info(f"_post_video_directly_to_discord: before send {channel} {type(channel)} "
-                                  f"{e.video_file} {origial_message_ref}.")
+                                  f"{e.video_file} {original_message_ref}.")
                 self._logger.info(f"_post_video_directly_to_discord: sending message: {message_content}")
                 with open(e.video_file, 'rb') as fp:
                     await channel.send(
                         content=message_content,
                         file=File(fp, filename),
-                        reference=origial_message_ref
+                        reference=original_message_ref
                     )
                     if original_message is not None:
-                        await original_message.remove_reaction('\N{HOURGLASS}', self.user)
+                        await self._replace_reactions(original_message, REACTIONS_DONE)
 
                 self._logger.info(f"_post_video_directly_to_discord: after send")
             self._logger.info(f"_post_video_directly_to_discord: Discord upload done")
@@ -225,6 +232,16 @@ class DownloaderClient(discord.Client):
                 await self._after_error(identifier, e2, additional_data_raw, filename)
 
         self._logger.exception(f"_after_error:Logging error for #{identifier} ({filename}; {additional_data_raw}):\n")
+        additional_data = AdditionalData.reconstruct(additional_data_raw) if additional_data_raw is not None else None
+        if (additional_data is not None) and (not isinstance(e, VideoUploadException)):
+            for channel in await self._get_output_channels(additional_data.in_channel):
+                try:
+                    original_message = await channel.fetch_message(additional_data.message_id)
+                    await self._replace_reactions(original_message, REACTIONS_FAILED)
+                except discord.errors.NotFound as e:
+                    pass
+                except Exception as e:
+                    self._logger.exception(f"_after_error: failure when adding reactions")
 
     async def _init_channels(self):
         self._logger.info(f"_init_channels: Connected")
@@ -323,8 +340,11 @@ class DownloaderClient(discord.Client):
                     new_attachment_filename = mover.move(tmp_file, out_file)
 
                     if (new_attachment_filename is not None) and re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
+                        await self._add_reactions(message, REACTIONS_WIP)
                         await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
                         self._check_thread()
+                    if not new_attachment_filename:
+                        await self._add_reactions(message, REACTIONS_REJECTED)
 
                     self._logger.info(f"* {attachment} (new: {new_attachment_filename})")
 
@@ -393,6 +413,30 @@ class DownloaderClient(discord.Client):
             return gameplay
         else:
             return match.group(1)
+
+    async def _remove_reactions(self, message: Message):
+        my_reactions = filter(lambda m: m.me, message.reactions)
+        aws = list(map(lambda reaction: message.remove_reaction(reaction.emoji, self.user), my_reactions))
+        done, pending = await asyncio.wait(aws, return_when=ALL_COMPLETED)
+        assert len(pending) == 0
+        for result in done:
+            try:
+                await result
+            except Exception as e:
+                self._logger.exception(f'exception when removing reaction from {message}:', exc_info=e)
+
+    async def _add_reactions(self, message: Message, reactions: Union[List[str], str]):
+        if isinstance(reactions, str):
+            return await self._add_reactions(message, [reactions])
+        for reaction in reactions:
+            try:
+                await message.add_reaction(reaction)
+            except Exception as e:
+                raise Exception(f'Error when addinng reaction {reaction}') from e
+
+    async def _replace_reactions(self, message: Message, reactions: Union[List[str], str]):
+        await self._remove_reactions(message)
+        await self._add_reactions(message, reactions)
 
 
 def create_igmdb_uploader():
