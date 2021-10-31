@@ -86,3 +86,7 @@ REACTIONS_REJECTED = ['🚫', '💩']
 REACTIONS_DONE = ['\u2714', '\u2705']
 
 REACTIONS_FAILED = ['💩', '❌']
+
+
+def already_rendered_message(url: str):
+    return f"Already rendered: {url}"
