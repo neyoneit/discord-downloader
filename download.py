@@ -110,6 +110,9 @@ class DownloaderClient(discord.Client):
             self._dirty = True
         else:
             channel_name = self._reverse_channels.get(message.channel)
+            if channel_name is None:
+                self._logger.warning(f"skipping message due to unknow channel name: {message.channel} / {message}")
+                return
             self._logger.info(f"new message in channel: {channel_name} ({message.channel})")
             check_all_messages = channel_name in CHANNELS
             self._logger.info("Checking single channel…")
