@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import os
 import subprocess
 
 from settings import DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS
