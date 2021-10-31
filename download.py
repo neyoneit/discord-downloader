@@ -17,8 +17,11 @@ from discord import Message, Attachment, File
 from discord.abc import Messageable
 from discord.iterators import HistoryIterator
 from pathvalidate import sanitize_filename
+from sqlalchemy import insert, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 
 from discord_downloader.additional_data import AdditionalData
+from discord_downloader.db import create_current_db_engine, RenderedDemo
 from discord_downloader.demo_analyzer import DemoAnalyzer
 from discord_downloader.demo_uploaders import FakeUploader, IgmdbUploader, OdfeDemoRenderer, \
     YoutubeUploader, VideoUploadException
@@ -34,7 +37,8 @@ from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIREC
     DEMO_RENDERING_LOCAL_ODFE_DEMO, DEMO_RENDERING_LOCAL_ODFE_VIDEO, DEMO_RENDERING_LOCAL_ODFE_CONFIG_PREFIX, \
     DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS, DISCORD_MAX_VIDEO_SIZE, \
     REACTIONS_WIP, REACTIONS_REJECTED, REACTIONS_DONE, REACTIONS_FAILED, \
-    DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX, DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID
+    DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX, DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID, \
+    already_rendered_message
 
 
 def extract_urls(msg):
@@ -46,10 +50,11 @@ class DownloaderClient(discord.Client):
     _output_channels: Dict[Optional[str], List[Messageable]]
     _dirty = False
 
-    def __init__(self, uploader: RenderingQueue, demo_analyzer: DemoAnalyzer, loop):
+    def __init__(self, uploader: RenderingQueue, demo_analyzer: DemoAnalyzer, loop, conn: AsyncEngine):
         super(DownloaderClient, self).__init__(loop=loop)
         self._uploader = uploader
         self.ret = 0
+        self._conn = conn
         self._loop = loop
         self._lock = asyncio.Lock(loop=loop)
         self._check_thread()
@@ -163,6 +168,7 @@ class DownloaderClient(discord.Client):
             )
             if original_message is not None:
                 await self._replace_reactions(original_message, REACTIONS_DONE)
+            await self._record_uploaded_video(url, additional_data)
             self._check_thread()
         if additional_data.has_unknown:
             notification_user = await self.fetch_user(DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID)
@@ -186,6 +192,7 @@ class DownloaderClient(discord.Client):
                 rerendering_round=next_round,
                 url=additional_data.url,
                 has_unknown=additional_data.has_unknown,
+                filename=additional_data.filename
             )
             await self._uploader.upload(
                 url=additional_data.url,
@@ -215,11 +222,12 @@ class DownloaderClient(discord.Client):
                                   f"{e.video_file} {original_message_ref}.")
                 self._logger.info(f"_post_video_directly_to_discord: sending message: {message_content}")
                 with open(e.video_file, 'rb') as fp:
-                    await channel.send(
+                    out_msg = await channel.send(
                         content=message_content,
                         file=File(fp, filename),
                         reference=original_message_ref
                     )
+                    await self._record_uploaded_video(url=out_msg.jump_url, additional_data=additional_data)
                     if original_message is not None:
                         await self._replace_reactions(original_message, REACTIONS_DONE)
 
@@ -336,9 +344,10 @@ class DownloaderClient(discord.Client):
                 attachment: Attachment
                 for i, attachment in enumerate(message.attachments):
                     tmp_file = os.path.join(TEMP_DIRECTORY, f"{message.id}-{attachment.id}-{i}-{os.getpid()}")
+                    sanitized_attachment_filename = sanitize_filename(attachment.filename, replacement_text='-')
                     out_file = os.path.join(
                         ATTACHMENTS_DIRECTORY,
-                        sanitize_filename(attachment.filename, replacement_text='-')
+                        sanitized_attachment_filename
                     )
                     with open(tmp_file, mode="wb") as f:
                         await attachment.save(f)
@@ -353,6 +362,9 @@ class DownloaderClient(discord.Client):
                         self._check_thread()
                     if not new_attachment_filename:
                         await self._add_reactions(message, REACTIONS_REJECTED)
+                        render_url = await self._get_rendered_video_url(sanitized_attachment_filename)
+                        if render_url is not None:
+                            await message.reply(already_rendered_message(render_url))
 
                     self._logger.info(f"* {attachment} (new: {new_attachment_filename})")
 
@@ -394,7 +406,8 @@ class DownloaderClient(discord.Client):
                 description=description,
                 rerendering_round=None,
                 url=attachment.url,
-                has_unknown=has_unknown
+                has_unknown=has_unknown,
+                filename=os.path.basename(local_filename)
             )
         except Exception as e:
             self._check_thread()
@@ -458,6 +471,24 @@ class DownloaderClient(discord.Client):
         await self._remove_reactions(message)
         await self._add_reactions(message, reactions)
 
+    async def _record_uploaded_video(self, url: str, additional_data: AdditionalData):
+        async with self._conn.begin() as connection:
+            connection: AsyncConnection
+            await connection.execute(insert(RenderedDemo).values(url=url, filename=additional_data.filename))
+
+    async def _get_rendered_video_url(self, filename):
+        async with self._conn.begin() as conn:
+            conn: AsyncConnection
+            res = await conn.execute(select(RenderedDemo).where(RenderedDemo.filename == filename))
+            all = res.fetchall()
+            if len(all) == 0:
+                return None
+            if len(all) == 1:
+                [record] = all
+                record: RenderedDemo
+                return record.url
+            raise Exception(f"WTF: {all} {filename}")
+
 
 def create_igmdb_uploader():
     if IGMDB_TOKEN is not None:
@@ -497,10 +528,9 @@ def create_uploader() -> Tuple[StoredState, RenderingQueue]:
         raise Exception(f"Unexpected DEMO_RENDERING_PROVIDER: {DEMO_RENDERING_PROVIDER}")
 
 
-def main():
-    loop = asyncio.ProactorEventLoop() if sys.platform == 'win32' else asyncio.SelectorEventLoop()
-    asyncio.set_event_loop(loop)
+async def main():
     try:
+        conn = create_current_db_engine()
         with filelock.FileLock(os.path.join(STATE_DIRECTORY, "run.lock")).acquire(timeout=10):
             file_handler = FileHandler(filename=os.path.join(STATE_DIRECTORY, "errors.log"))
             file_handler.setLevel(logging.WARNING)
@@ -515,8 +545,12 @@ def main():
                 uploader=uploader,
                 demo_analyzer=DemoAnalyzer(DEMOCLEANER_EXE),
                 loop=loop,
+                conn=conn
             )
-            client.run(DISCORD_TOKEN)
+            try:
+                await client.start(DISCORD_TOKEN)
+            finally:
+                await client.close()
             state.close()
             sys.exit(client.ret)
     except filelock.Timeout:
@@ -524,4 +558,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.ProactorEventLoop() if sys.platform == 'win32' else asyncio.SelectorEventLoop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(main())
