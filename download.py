@@ -185,6 +185,7 @@ class DownloaderClient(discord.Client):
                 description=additional_data.description,
                 rerendering_round=next_round,
                 url=additional_data.url,
+                has_unknown=additional_data.has_unknown,
             )
             await self._uploader.upload(
                 url=additional_data.url,
