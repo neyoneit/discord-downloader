@@ -479,7 +479,7 @@ class DownloaderClient(discord.Client):
     async def _get_rendered_video_url(self, filename):
         async with self._conn.begin() as conn:
             conn: AsyncConnection
-            res = await conn.execute(select(RenderedDemo).where(filename=filename))
+            res = await conn.execute(select(RenderedDemo).where(RenderedDemo.c.filename == filename))
             all = res.fetchall()
             if len(all) == 0:
                 return None
