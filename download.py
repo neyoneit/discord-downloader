@@ -232,6 +232,9 @@ class DownloaderClient(discord.Client):
                         await self._replace_reactions(original_message, REACTIONS_DONE)
 
                 self._logger.info(f"_post_video_directly_to_discord: after send")
+            if additional_data.has_unknown:
+                notification_user = await self.fetch_user(DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID)
+                await notification_user.send(f'Video with some unknown: {additional_data}')
             self._logger.info(f"_post_video_directly_to_discord: Discord upload done")
             return
 
