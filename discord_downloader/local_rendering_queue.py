@@ -99,6 +99,7 @@ class LocalRenderingQueue(AutonomousRenderingQueue):
             try:
                 video_url = await self._rendered_demo_uploader.upload(title, description, video_file)
                 datetime_ready = (datetime.datetime.now() + self._delay_before_publishing).timestamp()
+                print(f"datetime_ready: {datetime_ready}")
                 self._waiting_queue.append([datetime_ready, video_url, additional_data, demo_url])
             except Exception as e:
                 await self._report_error(demo_url, e, additional_data)
@@ -113,6 +114,7 @@ class LocalRenderingQueue(AutonomousRenderingQueue):
                 await self._waiting_queue_event.wait()  # prevents busy loop
                 self._waiting_queue_event.clear()
             [datetime_ready, video_url, additional_data, demo_url] = self._waiting_queue[0]
+            print(f"waiting {datetime_ready} / {datetime.datetime.fromtimestamp(datetime_ready)}")
             await wait_until(datetime.datetime.fromtimestamp(datetime_ready))
             for done_callback in self._done_callbacks:
                 try:
