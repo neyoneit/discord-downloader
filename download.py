@@ -246,6 +246,19 @@ class DownloaderClient(discord.Client):
         if isinstance(e, VideoUploadException):
             try:
                 await self._post_video_directly_to_discord(additional_data_raw, filename, e)
+                addi_data = AdditionalData.reconstruct(additional_data_raw) if additional_data_raw is not None else None
+                if addi_data.rerendering_round is None:  # don't spam on re-renders
+                    notification_user = await self.fetch_user(DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID)
+                    await notification_user.send(
+                        f'Video upload failed: {addi_data.url},\n'
+                        f'message: {addi_data.message_id},\n'
+                        f'channel: {addi_data.in_channel},\n'
+                        f'title: {addi_data.title}\n'
+                        f'description: {addi_data.description}\n'
+                        f'error details: {e.message}\n'
+                        f'video file: {e.video_file}\n'
+                    )
+
             except Exception as e2:
                 self._logger.exception(f"_after_error: Exception in error handler")
                 await self._after_error(identifier, e2, additional_data_raw, filename)

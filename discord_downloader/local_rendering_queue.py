@@ -8,10 +8,10 @@ from typing import List, Callable, Any, Awaitable
 
 from aiohttp import ClientSession
 
+from discord_downloader.additional_data import AdditionalData
 from discord_downloader.demo_uploaders import DemoRenderer, RenderedDemoUploader, VideoUploadException
 from discord_downloader.local_queue import AutonomousRenderingQueue
 from discord_downloader.persistent_state import StoredState
-from discord_downloader.additional_data import AdditionalData
 
 
 async def wait_until(instant: datetime.datetime):
