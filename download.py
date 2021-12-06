@@ -372,20 +372,21 @@ class DownloaderClient(discord.Client):
                         os.fsync(f.fileno())
                     new_attachment_filename, is_new = mover.move(tmp_file, out_file)
 
-                    if is_new and self._is_dm6x_filename(attachment):
-                        await self._add_reactions(message, REACTIONS_WIP)
-                        await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
-                        self._check_thread()
-                    if (not is_new) and self._is_dm6x_filename(attachment):
-                        render_url = await self._get_rendered_video_url(sanitized_attachment_filename)
-                        if render_url is not None:
-                            await self._add_reactions(message, REACTIONS_REJECTED)
-                            await message.reply(already_rendered_message(render_url))
-                        else:
-                            # We have already rendered it, but we don't have the YT URL
+                    if self._is_dm6x_filename(attachment):
+                        if is_new:
                             await self._add_reactions(message, REACTIONS_WIP)
                             await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
                             self._check_thread()
+                        else:
+                            render_url = await self._get_rendered_video_url(sanitized_attachment_filename)
+                            if render_url is not None:
+                                await self._add_reactions(message, REACTIONS_REJECTED)
+                                await message.reply(already_rendered_message(render_url))
+                            else:
+                                # We have already rendered it, but we don't have the YT URL
+                                await self._add_reactions(message, REACTIONS_WIP)
+                                await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
+                                self._check_thread()
 
                     self._logger.info(f"* {attachment} (new: {new_attachment_filename})")
 
