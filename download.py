@@ -370,17 +370,22 @@ class DownloaderClient(discord.Client):
                         self._check_thread()
                         f.flush()
                         os.fsync(f.fileno())
-                    new_attachment_filename = mover.move(tmp_file, out_file)
+                    new_attachment_filename, is_new = mover.move(tmp_file, out_file)
 
-                    if (new_attachment_filename is not None) and re.compile(".*\\.dm_6[0-9]$").match(attachment.filename) is not None:
+                    if is_new and self._is_dm6x_filename(attachment):
                         await self._add_reactions(message, REACTIONS_WIP)
                         await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
                         self._check_thread()
-                    if not new_attachment_filename:
-                        await self._add_reactions(message, REACTIONS_REJECTED)
+                    if (not is_new) and self._is_dm6x_filename(attachment):
                         render_url = await self._get_rendered_video_url(sanitized_attachment_filename)
                         if render_url is not None:
+                            await self._add_reactions(message, REACTIONS_REJECTED)
                             await message.reply(already_rendered_message(render_url))
+                        else:
+                            # We have already rendered it, but we don't have the YT URL
+                            await self._add_reactions(message, REACTIONS_WIP)
+                            await self._post_to_igmdb(attachment, new_attachment_filename, name, message)
+                            self._check_thread()
 
                     self._logger.info(f"* {attachment} (new: {new_attachment_filename})")
 
@@ -392,6 +397,9 @@ class DownloaderClient(discord.Client):
             except discord.errors.Forbidden:
                 self._logger.warning(f"No access to channel {channel}")
         savepoint.close()
+
+    def _is_dm6x_filename(self, filename) -> bool:
+        return re.compile(".*\\.dm_6[0-9]$").match(filename.filename) is not None
 
     async def _post_to_igmdb(self, attachment: Attachment, local_filename: str, channel_name: str, message: Message):
         self._check_thread()

@@ -2,7 +2,7 @@ import filecmp
 import itertools
 import os
 import re
-from typing import Optional
+from typing import Optional, Tuple
 
 
 class RenamingMover:
@@ -40,11 +40,11 @@ class DeduplicatingRenamingMover:
 
     SPLIT = re.compile("""^(.*)(\\.[^/.\\\\]*)$""")
 
-    def move(self, src: str, dest: str) -> Optional[str]:
+    def move(self, src: str, dest: str) -> Tuple[str, bool]:
         """
         :param src:
         :param dest:
-        :return: The adjusted filename. If the file was not actually created due to being a duplicate, it returns None.
+        :return: The adjusted filename + Whether the file was not actually created (i.e., not a duplicate).
         """
         for real_dest in self._moving_params(dest):
             # This is a bit racy, but we don't seem to have a better way for *NIX.
@@ -52,17 +52,17 @@ class DeduplicatingRenamingMover:
             if os.path.exists(real_dest):
                 if filecmp.cmp(src, real_dest):
                     os.unlink(src)
-                    return None
+                    return real_dest, False
             else:
                 try:
                     os.rename(src, real_dest)
-                    return real_dest
+                    return real_dest, True
                 except FileExistsError:
                     # This can happen only on Windows. Most likely, such situations are going to be caught by
                     # os.path.exists, so this can happen only in case of race conditions.
                     if filecmp.cmp(src, real_dest):
                         os.unlink(src)
-                        return None
+                        return real_dest, False
 
         raise AssertionError(
             "You have successfully iterated over an infinite generator. You can feel like Chuck Norris. Enjoy!")
