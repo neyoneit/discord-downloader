@@ -38,7 +38,7 @@ from settings import DISCORD_TOKEN, CHANNELS, STATE_DIRECTORY, ATTACHMENTS_DIREC
     DEMO_RENDERING_LOCAL_YOUTUBE_EXECUTABLE, DEMO_RENDERING_LOCAL_YOUTUBE_PARAMS, DISCORD_MAX_VIDEO_SIZE, \
     REACTIONS_WIP, REACTIONS_REJECTED, REACTIONS_DONE, REACTIONS_FAILED, \
     DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX, DEMO_RENDERING_MISSING_DETAILS_REPORT_USER_ID, \
-    already_rendered_message
+    already_rendered_message, RENDERING_DONE_MESSAGE_DISCORD
 
 
 def extract_urls(msg):
@@ -217,7 +217,7 @@ class DownloaderClient(discord.Client):
                 except discord.errors.NotFound as nfe:
                     original_message = None
                     original_message_ref = None
-                message_content = f"{RENDERING_DONE_MESSAGE_PREFIX}{RENDERING_DONE_MESSAGE_SUFFIX}"
+                message_content = f"{RENDERING_DONE_MESSAGE_DISCORD}"
                 self._logger.info(f"_post_video_directly_to_discord: before send {channel} {type(channel)} "
                                   f"{e.video_file} {original_message_ref}.")
                 self._logger.info(f"_post_video_directly_to_discord: sending message: {message_content}")

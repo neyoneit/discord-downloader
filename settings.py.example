@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from os.path import dirname
 
 DISCORD_TOKEN='<token>'
@@ -29,6 +30,8 @@ RENDERING_OUTPUT_CHANNEL = 'server name--výstupní kanál'  # or RENDERING_OUTP
 RENDERING_DONE_MESSAGE_PREFIX = "New render:\n"
 
 RENDERING_DONE_MESSAGE_SUFFIX = "\nRendered by igmdb"
+
+RENDERING_DONE_MESSAGE_DISCORD = "Rendered directly to Discord:"
 
 DEMOCLEANER_EXE = os.path.join(dirname(__file__), 'DemoCleaner3.exe')
 
