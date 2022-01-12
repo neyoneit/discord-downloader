@@ -496,6 +496,10 @@ class DownloaderClient(discord.Client):
         for reaction in reactions:
             try:
                 await message.add_reaction(reaction)
+            except discord.errors.Forbidden as e:
+                # demome is probably blocked by user, fuhgeddaboudit
+                self._logger.info(f'Error 403 when adding reaction, demome is probably blocked')
+                pass
             except Exception as e:
                 raise Exception(f'Error when addinng reaction {reaction}') from e
 
