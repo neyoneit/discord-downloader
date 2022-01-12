@@ -7,6 +7,7 @@ import os.path
 import random
 import re
 import subprocess
+import traceback
 import uuid
 from abc import abstractmethod
 from os import path
@@ -113,12 +114,18 @@ class YoutubeUploader(RenderedDemoUploader):
                 #    raise VideoUploadException("Error when uploading video: " + str(stderr), file)
                 stream_identifier = stdout.splitlines()[-1].decode('ASCII')
                 return f"https://youtu.be/{stream_identifier}"
+            # Why wasn't this being done?
+            except Exception as e:
+                traceback.print_exc()
             finally:
                 try:
                     proc.kill()
                 except ProcessLookupError:
                     pass
                 await proc.wait()
+        # Why wasn't this being done?
+        except Exception as e:
+            traceback.print_exc()
         finally:
             try:
                 if description_file is not None:
@@ -182,6 +189,9 @@ class OdfeDemoRenderer(DemoRenderer):
                     f'Demo renderer: Bad return errorcode {proc.returncode}; stdout {stdout}; stderr {stderr}')
             #if stderr not in [b'']:
             #    raise Exception("Error when rendering video: " + str(stderr))
+        # Why wasn't this being done?
+        except Exception as e:
+            traceback.print_exc()
         finally:
             try:
                 proc.kill()

@@ -2,6 +2,7 @@ import asyncio
 import re
 import subprocess
 import sys
+import traceback
 import xml.dom.minidom
 import xml.etree
 from typing import Dict
@@ -27,6 +28,9 @@ class DemoAnalyzer:
             return dict(map(lambda element: (self._postprocess_string(element.nodeName), self._postprocess_dict(element.attributes.items())), root.childNodes))
         except BaseException as e:
             raise Exception(f"Fail when processing {file}") from e
+        # Why wasn't this being done?
+        except Exception as e:
+            traceback.print_exc()
         finally:
             try:
                 proc.kill()

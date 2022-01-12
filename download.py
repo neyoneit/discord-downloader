@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+import traceback
 import threading
 import urllib
 import urllib.parse
@@ -95,6 +96,11 @@ class DownloaderClient(discord.Client):
                     self._uploader: AutonomousRenderingQueue
                     await self._uploader.run()
 
+            # Why wasn't this being done? The lack of this except block was
+            # swallowing exceptions, very fun!
+            except Exception as e:
+                self.ret = 1
+                traceback.print_exc()
             finally:
                 await self.close()
                 self._check_thread()
@@ -575,6 +581,9 @@ async def main():
             )
             try:
                 await client.start(DISCORD_TOKEN)
+            # Why wasn't this being done?
+            except Exception as e:
+                traceback.print_exc()
             finally:
                 await client.close()
             state.close()
