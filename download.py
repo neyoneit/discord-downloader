@@ -487,6 +487,10 @@ class DownloaderClient(discord.Client):
         for result in done:
             try:
                 await result
+            except discord.errors.Forbidden as e:
+                # demome is probably blocked by user, fuhgeddaboudit
+                self._logger.info(f'Error 403 when removing reaction, demome is probably blocked')
+                pass
             except Exception as e:
                 self._logger.exception(f'exception when removing reaction from {message}:', exc_info=e)
 
