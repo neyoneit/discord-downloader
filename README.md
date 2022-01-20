@@ -9,3 +9,10 @@
     Tato adresa slouží k přidání bota na server.
 
 6. Upravte settings.py (zkopírováním settings.py.example) a nastavte si kanály a adresáře.
+
+**Additional steps for running the bot locally:**
+
+7. Create "state" directory in project and put DB in there
+8. Create "out" directory in project and put urls.csv in there
+9. Create "out/tmp" directory in project
+10. Create "out/attachments" directory in project
