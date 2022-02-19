@@ -429,7 +429,6 @@ class DownloaderClient(discord.Client):
             time = unknown_if_none(demo_info['record'].get('bestTime'))
             title = f"DeFRaG: {nick} {time} {physics} {mapname}".replace('<', '_').replace('>', '_')
             description_orig = f"Nickname: {nick}\nTime: {time}\nPhysics: {physics}\nMap: {mapname}\nDemo download: {message.id}\n" \
-
                                f"{DEMO_RENDERING_LOCAL_YOUTUBE_DESCRIPTION_SUFFIX}"
             description = description_orig.replace('<', '_').replace('>', '_')
             additional_data = AdditionalData(
