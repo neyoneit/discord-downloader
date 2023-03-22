@@ -347,8 +347,9 @@ class DownloaderClient(discord.Client):
         history: HistoryIterator = channel.history(
             limit=None,
             oldest_first=True,
-            after=discord.Object(last_processed_message_id)
+            after=discord.Object(891111111283456789) if last_processed_message_id is None else discord.Object(last_processed_message_id)
         )
+        print("last_processed_message_id: " + str(last_processed_message_id))
         with open(URLS_FILE, "a") as urls_file:
             def before_sync():
                 self._logger.info("Syncing… ")
