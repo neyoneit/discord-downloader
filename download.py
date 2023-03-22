@@ -126,6 +126,8 @@ class DownloaderClient(discord.Client):
                 return
             self._logger.info(f"new message in channel: {channel_name} ({message.channel})")
             check_all_messages = channel_name in CHANNELS
+            self._logger.info("Is channel in CHANNELS : " + str(check_all_messages))
+            self._logger.info("Channel: " + str(channel_name))
             self._logger.info("Checking single channel…")
             await self._download_channel(channel_name, message.channel, check_all_messages)
             self._check_thread()
