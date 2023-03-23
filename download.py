@@ -252,6 +252,8 @@ class DownloaderClient(discord.Client):
     async def _after_error(self, identifier: Optional[int], e: Exception, additional_data_raw, filename: Optional[str] = None):
         self._check_thread()
         if isinstance(e, VideoUploadException):
+            raise Exception("VideoUploadException happened: " + str(e))
+            return
             try:
                 await self._post_video_directly_to_discord(additional_data_raw, filename, e)
                 addi_data = AdditionalData.reconstruct(additional_data_raw) if additional_data_raw is not None else None
