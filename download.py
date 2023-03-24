@@ -126,8 +126,6 @@ class DownloaderClient(discord.Client):
                 return
             self._logger.info(f"new message in channel: {channel_name} ({message.channel})")
             check_all_messages = channel_name in CHANNELS
-            self._logger.info("Is channel in CHANNELS : " + str(check_all_messages))
-            self._logger.info("Channel: " + str(channel_name))
             self._logger.info("Checking single channel…")
             await self._download_channel(channel_name, message.channel, check_all_messages)
             self._check_thread()
@@ -252,8 +250,9 @@ class DownloaderClient(discord.Client):
     async def _after_error(self, identifier: Optional[int], e: Exception, additional_data_raw, filename: Optional[str] = None):
         self._check_thread()
         if isinstance(e, VideoUploadException):
-            raise Exception("VideoUploadException happened: " + str(e))
-            return
+            # raise Exception("VideoUploadException happened: " + str(e))
+            # return
+            os._exit()
             try:
                 await self._post_video_directly_to_discord(additional_data_raw, filename, e)
                 addi_data = AdditionalData.reconstruct(additional_data_raw) if additional_data_raw is not None else None
@@ -351,7 +350,6 @@ class DownloaderClient(discord.Client):
             oldest_first=True,
             after=discord.Object(891111111283456789) if last_processed_message_id is None else discord.Object(last_processed_message_id)
         )
-        print("last_processed_message_id: " + str(last_processed_message_id))
         with open(URLS_FILE, "a") as urls_file:
             def before_sync():
                 self._logger.info("Syncing… ")
@@ -606,6 +604,7 @@ async def main():
 
 
 if __name__ == "__main__":
+    os._exit()
     loop = asyncio.ProactorEventLoop() if sys.platform == 'win32' else asyncio.SelectorEventLoop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(main())
