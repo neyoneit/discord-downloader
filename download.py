@@ -252,7 +252,6 @@ class DownloaderClient(discord.Client):
         if isinstance(e, VideoUploadException):
             # raise Exception("VideoUploadException happened: " + str(e))
             # return
-            os._exit()
             try:
                 await self._post_video_directly_to_discord(additional_data_raw, filename, e)
                 addi_data = AdditionalData.reconstruct(additional_data_raw) if additional_data_raw is not None else None
@@ -283,6 +282,9 @@ class DownloaderClient(discord.Client):
                     pass
                 except Exception as e:
                     self._logger.exception(f"_after_error: failure when adding reactions")
+
+        self._logger.exception(f"Error has been detected, force exiting !")
+        os._exit()
 
     async def _init_channels(self):
         self._logger.info(f"_init_channels: Connected")
@@ -604,7 +606,6 @@ async def main():
 
 
 if __name__ == "__main__":
-    os._exit()
     loop = asyncio.ProactorEventLoop() if sys.platform == 'win32' else asyncio.SelectorEventLoop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(main())
