@@ -6,6 +6,7 @@ import logging
 import os.path
 import random
 import re
+import os
 import subprocess
 import traceback
 import uuid
@@ -81,6 +82,7 @@ class YoutubeUploader(RenderedDemoUploader):
         self._youtube_uploader_params = youtube_uploader_params
 
     async def upload(self, title: str, description: str, file: str):
+        print(f'Uploading {file} to YouTube...')
         try:
             description_file = None
             with NamedTemporaryFile(delete=False, ) as tf:
@@ -116,22 +118,28 @@ class YoutubeUploader(RenderedDemoUploader):
                 return f"https://youtu.be/{stream_identifier}"
             # Why wasn't this being done?
             except Exception as e:
+                print("Error when uploading video: " + str(e))
+                os._exit()
                 traceback.print_exc()
             finally:
                 try:
                     proc.kill()
                 except ProcessLookupError:
-                    pass
+                    print("Error killing process: ")
+                    os._exit()
                 await proc.wait()
         # Why wasn't this being done?
         except Exception as e:
             traceback.print_exc()
+            print("Error when uploading video (Exception e): " + str(e))
+            os._exit()
         finally:
             try:
                 if description_file is not None:
                     os.remove(description_file)
             except FileNotFoundError:
-                pass
+                print("Error file not found: " + str(description_file))
+                os._exit()
 
 
 class VideoUploadException(Exception):
