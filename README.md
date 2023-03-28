@@ -1,3 +1,9 @@
+**deprecated**
+
+
+
+
+
 1. pip install -r requirements.txt
 2. Vytvořte aplikaci na https://discord.com/developers/applications
 3. Přejděte do Bot a klikněte na Add Bot
